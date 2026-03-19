@@ -22,6 +22,16 @@ const reviewTexts = [
   "Perfect for families, safe neighborhood and good schools nearby.",
   "Stylish interiors and well-kept amenities.",
   "Affordable and convenient, exceeded expectations.",
+  "Smooth rental process, everything was handled quickly.",
+  "The property was spotless and well-maintained.",
+  "Excellent communication from the agent throughout.",
+  "Quiet neighborhood, ideal for working from home.",
+  "Loved the natural lighting in the living room.",
+  "The kitchen was modern and fully equipped.",
+  "Parking space was a huge plus.",
+  "Felt safe and secure, great security features.",
+  "The garden was beautiful and well-kept.",
+  "Would definitely recommend to friends and family.",
 ];
 
 const COLLECTIONS = {
@@ -170,7 +180,11 @@ async function seed() {
         COLLECTIONS.GALLERY!,
         ID.unique(),
         {
-          image,
+          image1: image,
+          image2:
+            galleryImages[Math.floor(Math.random() * galleryImages.length)],
+          image3:
+            galleryImages[Math.floor(Math.random() * galleryImages.length)],
           property: null, // relationship field (Many → One)
         },
       );
@@ -195,11 +209,7 @@ async function seed() {
         facilities.length,
       ).join(", ");
 
-      const image =
-        propertiesImages[i - 1] ??
-        propertiesImages[Math.floor(Math.random() * propertiesImages.length)];
-
-      // ✅ CREATE PROPERTY (NO gallery FIELD)
+      // Pick multiple images for property
       const property = await databases.createDocument(
         config.databaseId!,
         COLLECTIONS.PROPERTY!,
@@ -211,11 +221,6 @@ async function seed() {
             reviewTexts[Math.floor(Math.random() * reviewTexts.length)],
           address: `123 Property Street, City ${i}`,
 
-          // If this is geoPoint type, change format accordingly
-          geolocation: `${(-33 + Math.random()).toFixed(
-            6,
-          )}, ${(18 + Math.random()).toFixed(6)}`,
-
           price: Math.floor(Math.random() * 9000) + 1000,
           area: parseFloat((Math.random() * 3000 + 500).toFixed(2)),
           bedrooms: Math.floor(Math.random() * 5) + 1,
@@ -223,8 +228,19 @@ async function seed() {
           rating: parseFloat((Math.random() * 4 + 1).toFixed(1)),
 
           facilities: selectedFacilities,
-          image: image,
 
+          image1:
+            propertiesImages[
+              Math.floor(Math.random() * propertiesImages.length)
+            ],
+          image2:
+            propertiesImages[
+              Math.floor(Math.random() * propertiesImages.length)
+            ],
+          image3:
+            propertiesImages[
+              Math.floor(Math.random() * propertiesImages.length)
+            ],
           agent: assignedAgent.$id,
           reviews: assignedReviews.map((r) => r.$id),
         },
@@ -252,8 +268,8 @@ async function seed() {
     }
 
     console.log("Data seeding completed successfully.");
-  } catch (error) {
-    console.error("Error seeding data:", error);
+  } catch (error: any) {
+    console.error("Error seeding data:", error?.message ?? error);
   }
 }
 

@@ -64,7 +64,7 @@ const FeaturedModal = ({
               >
                 {/* Property Image */}
                 <Image
-                  source={{ uri: item.image }}
+                  source={{ uri: item.image2 }}
                   className="w-24 h-24"
                   resizeMode="cover"
                 />
@@ -75,7 +75,7 @@ const FeaturedModal = ({
                     className="text-lg font-rubik-bold text-black-300 mb-1"
                     numberOfLines={1}
                   >
-                    {item.name}
+                    {item.propertyName}
                   </Text>
 
                   <View className="flex-row items-center mb-1">
@@ -85,7 +85,7 @@ const FeaturedModal = ({
                       tintColor="#FDB241"
                     />
                     <Text className="text-black-200 text-xs font-rubik ml-1">
-                      {item.rating || 4.5} ({item.reviews?.length || 0} reviews)
+                      {item.rating || 0}
                     </Text>
                   </View>
 
@@ -101,7 +101,7 @@ const FeaturedModal = ({
                       ${item.price}
                     </Text>
                     <Text className="text-black-200 text-xs font-rubik ml-1">
-                      /night
+                      /month
                     </Text>
                   </View>
                 </View>

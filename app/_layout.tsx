@@ -1,3 +1,4 @@
+import { AuthProvider } from "@/context/AuthContext";
 import useAuthStore from "@/store/auth.store";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -19,7 +20,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     fetchAuthenticatedUser();
-  }, []);
+  }, [fetchAuthenticatedUser]);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -28,5 +29,9 @@ export default function RootLayout() {
   }, [fontsLoaded]);
 
   // 🚀 ALWAYS render a navigator
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <AuthProvider>
+      <Stack screenOptions={{ headerShown: false }} />;
+    </AuthProvider>
+  );
 }

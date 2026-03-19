@@ -104,21 +104,22 @@ export const featuredCards = [
 
 export const categories = [
   { title: "All", category: "All" },
-  { title: "Houses", category: "House" },
-  { title: "Cottages", category: "Cottage" },
-  { title: "Duplexes", category: "Duplex" },
+  { title: "House", category: "House" },
+  { title: "Cottage", category: "Cottage" },
+  { title: "Duplex", category: "Duplex" },
   { title: "Luxury", category: "Luxury" },
-  { title: "Studios", category: "Studio" },
+  { title: "Studio", category: "Studio" },
   { title: "Land", category: "Land" },
-  { title: "Apartments", category: "Apartment" },
-  { title: "Workplaces", category: "Workplace" },
-  { title: "Others", category: "Other" },
+  { title: "Apartment", category: "Apartment" },
+  { title: "Workplace", category: "Workplace" },
+  { title: "Other", category: "Other" },
+  { title: "Boarding House", category: "Boarding" },
 ];
 
 export const facilities = [
   {
-    title: "Laundry",
-    icon: icons.laundry,
+    title: "cctv",
+    icon: icons.cctv,
   },
   {
     title: "Car Parking",
@@ -129,8 +130,8 @@ export const facilities = [
     icon: icons.run,
   },
   {
-    title: "Cutlery",
-    icon: icons.cutlery,
+    title: "B.I.Cs",
+    icon: icons.furniture,
   },
   {
     title: "Gym",
@@ -147,6 +148,26 @@ export const facilities = [
   {
     title: "Pet Center",
     icon: icons.dog,
+  },
+  {
+    title: "Gated",
+    icon: icons.walled,
+  },
+  {
+    title: "Solar back Up",
+    icon: icons.solar,
+  },
+  {
+    title: "Borehole",
+    icon: icons.borehole,
+  },
+  {
+    title: "Tiled",
+    icon: icons.tiled,
+  },
+  {
+    title: "Painted",
+    icon: icons.painted,
   },
 ];
 
@@ -174,5 +195,106 @@ export const gallery = [
   {
     id: 6,
     image: images.japan,
+  },
+
+  {
+    id: 7,
+    image: images.bed1,
+  },
+  {
+    id: 8,
+    image: images.bed2,
+  },
+  {
+    id: 9,
+    image: images.bed3,
+  },
+  {
+    id: 10,
+    image: images.bed4,
+  },
+  {
+    id: 11,
+    image: images.bed5,
+  },
+  {
+    id: 12,
+    image: images.bed6,
+  },
+  {
+    id: 13,
+    image: images.bed7,
+  },
+  {
+    id: 14,
+    image: images.bed8,
+  },
+  {
+    id: 15,
+    image: images.bed9,
+  },
+  {
+    id: 16,
+    image: images.bed10,
+  },
+  { id: 17, image: images.nightHouse1 },
+  {
+    id: 18,
+    image: images.nightHouse2,
+  },
+  {
+    id: 19,
+    image: images.nightHouse3,
+  },
+  { id: 20, image: images.dayHouse },
+  {
+    id: 21,
+    image: images.dayHouse2,
+  },
+  { id: 22, image: images.lounge1 },
+  { id: 23, image: images.lounge2 },
+  {
+    id: 24,
+    image: images.lounge3,
+  },
+  {
+    id: 25,
+    image: images.lounge4,
+  },
+  {
+    id: 26,
+    image: images.lounge5,
+  },
+  {
+    id: 27,
+    image: images.lounge6,
+  },
+  {
+    id: 28,
+    image: images.lounge7,
+  },
+  {
+    id: 29,
+    image: images.lounge8,
+  },
+  {
+    id: 30,
+    image: images.lounge9,
+  },
+  {
+    id: 31,
+    image: images.lounge10,
+  },
+  {
+    id: 32,
+    image: images.lounge11,
+  },
+  {
+    id: 33,
+    image: images.lounge12,
+  },
+  {
+    id: 34,
+    image: images.lounge13,
   },
 ];

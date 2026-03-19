@@ -1,13 +1,18 @@
+import { categories } from "@/constants/data";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
-import { ScrollView, Text, TouchableOpacity } from "react-native";
-
-import { categories } from "@/constants/data";
+import {
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  useColorScheme,
+} from "react-native";
+import { Colors } from "../constants/Colors";
 
 const Filters = () => {
   const params = useLocalSearchParams<{ filter?: string }>();
   const [selectedCategory, setSelectedCategory] = useState(
-    params.filter || "All"
+    params.filter || "All",
   );
 
   const handleCategoryPress = (category: string) => {
@@ -20,6 +25,8 @@ const Filters = () => {
     setSelectedCategory(category);
     router.setParams({ filter: category });
   };
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
 
   return (
     <ScrollView
@@ -40,9 +47,15 @@ const Filters = () => {
           <Text
             className={`text-sm ${
               selectedCategory === item.category
-                ? "text-white font-rubik-bold mt-0.5"
-                : "text-black-300 font-rubik"
+                ? "font-rubik-bold mt-0.5"
+                : "font-rubik"
             }`}
+            style={{
+              color:
+                selectedCategory === item.category
+                  ? theme.title // or theme.background or whatever your white color is called
+                  : theme.title, // or theme.textLight
+            }}
           >
             {item.title}
           </Text>

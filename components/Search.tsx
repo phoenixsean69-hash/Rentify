@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useColorScheme,
+  View,
+} from "react-native";
 
+import { Colors } from "@/constants/Colors";
 import icons from "@/constants/icons";
 import { router, useLocalSearchParams } from "expo-router";
 
@@ -44,10 +52,16 @@ const Search = () => {
     router.push("/");
   };
 
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
+
   return (
     <View>
       {/* Main Search Input */}
-      <View className="flex flex-row items-center justify-between w-full px-4 rounded-lg bg-accent-100 border border-primary-100 mt-5 py-2">
+      <View
+        className="flex flex-row items-center justify-between w-full px-4 rounded-lg bg-accent-100 border border-primary-100 mt-5 py-2"
+        style={{ backgroundColor: theme.navBackground }}
+      >
         <View className="flex-1 flex flex-row items-center justify-start z-50">
           <Image source={icons.search} className="size-5" tintColor="#858585" />
           <TextInput

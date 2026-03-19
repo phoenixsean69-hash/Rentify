@@ -1,12 +1,11 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   SafeAreaView,
   Text,
-  TouchableOpacity,
+  useColorScheme,
   View,
 } from "react-native";
 
@@ -14,8 +13,8 @@ import { Card } from "@/components/Cards";
 import Filters from "@/components/Filters";
 import NoResults from "@/components/NoResults";
 import Search from "@/components/Search";
-import icons from "@/constants/icons";
 
+import { Colors } from "@/constants/Colors";
 import { getProperties } from "@/lib/appwrite";
 import { useAppwrite } from "@/lib/useAppwrite";
 
@@ -43,9 +42,10 @@ const Explore = () => {
   }, [params.filter, params.query]);
 
   const handleCardPress = (id: string) => router.push(`/properties/${id}`);
-
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
   return (
-    <SafeAreaView className="h-full bg-white">
+    <SafeAreaView style={{ backgroundColor: theme.navBackground }}>
       <FlatList
         data={properties}
         numColumns={2}
@@ -64,22 +64,16 @@ const Explore = () => {
           )
         }
         ListHeaderComponent={() => (
-          <View className="px-5">
-            <View className="flex flex-row items-center justify-between mt-5">
-              <TouchableOpacity
-                onPress={() => router.back()}
-                className="flex flex-row bg-primary-200 rounded-full size-11 items-center justify-center"
-              >
-                <Image source={icons.backArrow} className="size-5" />
-              </TouchableOpacity>
-            </View>
-
+          <View className="px-5 py-5">
             <Search />
 
             <View className="mt-5">
               <Filters />
 
-              <Text className="text-xl font-rubik-bold text-black-300 mt-5">
+              <Text
+                className="text-xl font-rubik-bold text-black-300 mt-5"
+                style={{ color: theme.title }}
+              >
                 Found {properties?.length} Top Properties
               </Text>
             </View>

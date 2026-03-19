@@ -1,23 +1,43 @@
+import { Colors } from "@/constants/Colors";
 import useAuthStore from "@/store/auth.store";
 import { router } from "expo-router";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 
-const Index = () => {
-  // ✅ Grab the user object from the store
-  const { user } = useAuthStore();
+import { ActivityIndicator, Text, useColorScheme, View } from "react-native";
+
+export default function Index() {
+  const { user, isLoading, isAuthenticated, fetchAuthenticatedUser } =
+    useAuthStore();
 
   useEffect(() => {
-    if (!user) return; // handle case where user is null
+    fetchAuthenticatedUser();
+  }, [fetchAuthenticatedUser]);
 
-    if (user.userMode === "landlord") {
-      router.replace("/landHome");
-    } else {
-      router.replace("/tenantHome");
+  useEffect(() => {
+    if (!isLoading) {
+      if (isAuthenticated && user?.userMode === "tenant") {
+        router.replace("/tenantHome");
+      } else if (isAuthenticated && user?.userMode === "landlord") {
+        router.replace("/landHome");
+      } else if (!isAuthenticated) {
+        router.replace("/sign-up");
+      }
     }
-  }, [user]);
-
-  // Return a placeholder view while redirecting
-  return null;
-};
-
-export default Index;
+  }, [isLoading, isAuthenticated, user]);
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
+  return (
+    <View
+      className="flex-1 items-center justify-center"
+      style={{ backgroundColor: theme.navBackground }}
+    >
+      <ActivityIndicator size="large" color="#2196F3" />
+      <Text
+        className="mt-4 text-lg font-rubik-medium text-black-300"
+        style={{ color: theme.title }}
+      >
+        {isLoading ? "Please Wait" : "Loading..."}
+      </Text>
+    </View>
+  );
+}

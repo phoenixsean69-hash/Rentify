@@ -1,73 +1,68 @@
-import { useState } from "react";
+// components/CustomInput.tsx
+import { Colors } from "@/constants/Colors";
+import icons from "@/constants/icons";
+import React, { useState } from "react";
+
 import {
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
+  Image,
   Text,
   TextInput,
+  TextInputProps,
+  TouchableOpacity,
+  useColorScheme,
   View,
 } from "react-native";
 
-interface CustomInputProps {
-  placeholder?: string;
-  value: string;
-  onChangeText: (text: string) => void;
+interface CustomInputProps extends TextInputProps {
   label: string;
-  secureTextEntry?: boolean;
-  keyboardType?: "default" | "email-address" | "numeric" | "phone-pad";
+  error?: string;
 }
 
 const CustomInput = ({
-  placeholder = "Enter text",
-  value,
-  onChangeText,
   label,
-  secureTextEntry = false,
-  keyboardType = "default",
+  error,
+  secureTextEntry,
+  ...props
 }: CustomInputProps) => {
-  const [isFocused, setIsFocused] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <View style={styles.container}>
-        <Text style={styles.label}>{label}</Text>
-
+    <View className="mb-4">
+      <Text className="text-sm font-rubik-medium text-gray-700 mb-2">
+        {label}
+      </Text>
+      <View
+        className={`
+    flex-row items-center border rounded-2xl px-4
+    ${error ? "border-red-400" : "border-gray-300"}
+  `}
+        style={{ backgroundColor: theme.navBackground }}
+      >
         <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={value}
-          onChangeText={onChangeText}
-          secureTextEntry={secureTextEntry}
-          keyboardType={keyboardType}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          placeholder={placeholder}
-          placeholderTextColor="#888"
-          style={[
-            styles.input,
-            isFocused ? styles.inputFocused : styles.inputBlurred,
-          ]}
+          className="flex-1 py-4 text-base"
+          style={{ color: theme.title }}
+          placeholderTextColor="#9CA3AF"
+          secureTextEntry={secureTextEntry && !showPassword}
+          {...props}
         />
+        {secureTextEntry && (
+          <TouchableOpacity
+            onPress={() => setShowPassword(!showPassword)}
+            className="ml-2"
+          >
+            <Image
+              source={showPassword ? icons.eyeHide : icons.eye}
+              className="w-5 h-5"
+              style={{ tintColor: "#6B7280" }}
+            />
+          </TouchableOpacity>
+        )}
       </View>
-    </KeyboardAvoidingView>
+      {error && <Text className="text-red-500 text-xs mt-2">{error}</Text>}
+    </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { width: "100%", marginBottom: 16 },
-  label: { color: "#555", fontWeight: "600", marginBottom: 8 },
-  input: {
-    borderWidth: 1.5,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: "#222",
-  },
-  inputBlurred: { borderColor: "#ccc" },
-  inputFocused: { borderColor: "#0D6EFD" },
-});
 
 export default CustomInput;

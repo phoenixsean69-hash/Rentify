@@ -1,7 +1,14 @@
 import { Tabs } from "expo-router";
-import { Image, ImageSourcePropType, Text, View } from "react-native";
+import {
+  Image,
+  ImageSourcePropType,
+  Text,
+  View,
+  useColorScheme,
+} from "react-native";
 
 import icons from "@/constants/icons";
+import { Colors } from "../../../constants/Colors";
 
 const TabIcon = ({
   focused,
@@ -32,12 +39,18 @@ const TabIcon = ({
 );
 
 const TabsLayout = () => {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
+
   return (
     <Tabs
       screenOptions={{
+        headerStyle: { backgroundColor: theme.navBackground },
+        headerTintColor: theme.title,
         tabBarShowLabel: false,
         tabBarStyle: {
-          backgroundColor: "white",
+          backgroundColor: theme.navBackground,
+
           position: "absolute",
           borderTopColor: "#0061FF1A",
           borderTopWidth: 1,

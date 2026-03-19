@@ -1,5 +1,9 @@
 // screens/Profile.tsx
+import AvatarSuccessModal from "@/components/AvatarSuccessModal";
+import BlueAvatarModal from "@/components/BlueAvatarModal";
+import icons from "@/constants/icons";
 import { logout } from "@/lib/appwrite";
+import useAuthStore from "@/store/auth.store";
 import {
   clearSavedAvatar,
   getSavedAvatar,
@@ -7,14 +11,16 @@ import {
 } from "@/utils/avatarStorage";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+  useColorScheme,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-import AvatarSuccessModal from "@/components/AvatarSuccessModal";
-import BlueAvatarModal from "@/components/BlueAvatarModal";
-import { getAvatarSource } from "@/constants/data";
-import icons from "@/constants/icons";
-import useAuthStore from "@/store/auth.store";
+import { Colors } from "../../../constants/Colors";
 
 const Profile = () => {
   const { user } = useAuthStore();
@@ -51,13 +57,19 @@ const Profile = () => {
       alert("Failed to logout");
     }
   };
-
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
   return (
-    <SafeAreaView className="h-full bg-white">
-      <ScrollView contentContainerClassName="pb-32 px-7">
+    <SafeAreaView style={{ backgroundColor: theme.navBackground }}>
+      <ScrollView contentContainerClassName="pb-40 px-7">
         {/* Header */}
         <View className="flex flex-row items-center justify-between mt-5">
-          <Text className="text-xl font-rubik-bold">Profile</Text>
+          <Text
+            className="text-xl font-rubik-bold"
+            style={{ color: theme.title }}
+          >
+            Profile
+          </Text>
         </View>
 
         {/* Avatar Section */}
@@ -65,7 +77,7 @@ const Profile = () => {
           <View className="relative">
             {!loadingAvatar && (
               <Image
-                source={getAvatarSource(avatarId)}
+                source={{ uri: user?.avatar }}
                 className="w-40 h-40 rounded-full border-4 border-white shadow-lg"
               />
             )}
@@ -80,7 +92,12 @@ const Profile = () => {
               />
             </TouchableOpacity>
           </View>
-          <Text className="text-2xl font-rubik-bold mt-4">{user?.name}</Text>
+          <Text
+            className="text-2xl font-rubik-bold mt-4"
+            style={{ color: theme.title }}
+          >
+            {user?.name}
+          </Text>
           <Text className="text-base font-rubik text-black-200 mt-1">
             {user?.email}
           </Text>
@@ -90,41 +107,14 @@ const Profile = () => {
         <View className="flex flex-col mt-10">
           <TouchableOpacity
             className="flex flex-row items-center py-4"
-            onPress={() => router.push("/my-bookings")}
+            onPress={() => router.push("/my-favorites")}
           >
             <Image source={icons.calendar} className="size-6" />
-            <Text className="text-lg font-rubik-medium text-black-300 ml-4">
-              My Bookings
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="flex flex-row items-center py-4"
-            onPress={() => router.push("/notifications")}
-          >
-            <Image source={icons.bell} className="size-6" />
-            <Text className="text-lg font-rubik-medium text-black-300 ml-4">
-              Notifications
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="flex flex-row items-center py-4"
-            onPress={() => router.push("/security")}
-          >
-            <Image source={icons.shield} className="size-6" />
-            <Text className="text-lg font-rubik-medium text-black-300 ml-4">
-              Security
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="flex flex-row items-center py-4"
-            onPress={() => router.push("/language")}
-          >
-            <Image source={icons.language} className="size-6" />
-            <Text className="text-lg font-rubik-medium text-black-300 ml-4">
-              Language
+            <Text
+              className="text-lg font-rubik-medium text-black-300 ml-4"
+              style={{ color: theme.title }}
+            >
+              My Favorites
             </Text>
           </TouchableOpacity>
 
@@ -133,7 +123,10 @@ const Profile = () => {
             onPress={() => router.push("/help")}
           >
             <Image source={icons.info} className="size-6" />
-            <Text className="text-lg font-rubik-medium text-black-300 ml-4">
+            <Text
+              className="text-lg font-rubik-medium text-black-300 ml-4"
+              style={{ color: theme.title }}
+            >
               Help Center
             </Text>
           </TouchableOpacity>
