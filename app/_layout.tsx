@@ -1,11 +1,30 @@
 import { AuthProvider } from "@/context/AuthContext";
 import useAuthStore from "@/store/auth.store";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Slot } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import { LogBox } from "react-native";
 import "./global.css";
 
+// Ignore specific warnings that are not critical
+LogBox.ignoreLogs([
+  "JSON Parse error",
+  "Error parsing reviews",
+  "Setting a timer",
+]);
+
+// Optional: Ignore all warnings in production
+if (!__DEV__) {
+  LogBox.ignoreAllLogs();
+}
+// Ignore specific Appwrite-related errors
+LogBox.ignoreLogs([
+  "JSON Parse error: Unexpected character: G",
+  "Error parsing reviews",
+  "Error fetchingagent",
+  "Error checking like status",
+]);
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     "Rubik-Bold": require("../assets/fonts/Rubik-Bold.ttf"),
@@ -31,7 +50,7 @@ export default function RootLayout() {
   // 🚀 ALWAYS render a navigator
   return (
     <AuthProvider>
-      <Stack screenOptions={{ headerShown: false }} />;
+      <Slot />
     </AuthProvider>
   );
 }

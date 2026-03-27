@@ -45,10 +45,10 @@ const TabsLayout = () => {
         headerTintColor: theme.title,
         tabBarShowLabel: false,
         tabBarStyle: {
-          backgroundColor: "#0061FF",
+          backgroundColor: theme.navBackground,
           position: "absolute",
           borderTopColor: "#0061FF1A",
-          borderTopWidth: 1,
+          borderTopWidth: 2,
           minHeight: 70,
         },
       }}
@@ -63,6 +63,65 @@ const TabsLayout = () => {
           ),
         }}
       />
+
+      <Tabs.Screen
+        name="addProperty"
+        options={{
+          title: "Profile",
+          headerShown: false,
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
+        name="landChat"
+        options={{
+          title: "Profile",
+          headerShown: false,
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
+      <Tabs.Screen
+        name="landCalendar"
+        options={{
+          title: "Profile",
+          headerShown: false,
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
+      <Tabs.Screen
+        name="landSettings"
+        options={{
+          title: "Profile",
+          headerShown: false,
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
+      <Tabs.Screen
+        name="landHelp"
+        options={{
+          title: "Profile",
+          headerShown: false,
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
+      <Tabs.Screen
+        name="landLordNotifications"
+        options={{
+          title: "Profile",
+          headerShown: false,
+          href: null,
+        }}
+      />
+
       <Tabs.Screen
         name="landProfile"
         options={{
@@ -70,6 +129,16 @@ const TabsLayout = () => {
           headerShown: false,
           tabBarIcon: ({ focused }) => (
             <TabIcon focused={focused} icon={icons.person} title="Profile" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="Landrequests"
+        options={{
+          title: "Requests",
+          headerShown: false,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} icon={icons.inbox} title="Requests" />
           ),
         }}
       />

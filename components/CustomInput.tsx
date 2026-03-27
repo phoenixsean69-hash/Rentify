@@ -30,7 +30,7 @@ const CustomInput = ({
 
   return (
     <View className="mb-4">
-      <Text className="text-sm font-rubik-medium text-gray-700 mb-2">
+      <Text className="text-sm font-rubik-medium text-gray-500 mb-2">
         {label}
       </Text>
       <View

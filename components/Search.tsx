@@ -1,92 +1,80 @@
-import React, { useEffect, useState } from "react";
+import { Colors } from "@/constants/Colors";
+import icons from "@/constants/icons";
+import { router, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Image,
-  Text,
   TextInput,
   TouchableOpacity,
   useColorScheme,
   View,
 } from "react-native";
 
-import { Colors } from "@/constants/Colors";
-import icons from "@/constants/icons";
-import { router, useLocalSearchParams } from "expo-router";
-
 const Search = () => {
   const params = useLocalSearchParams<{ query?: string }>();
-  const [search, setSearch] = useState(params.query || "");
-  const [tempSearch, setTempSearch] = useState(params.query || "");
-
-  // Check if we're in search mode (has query)
-  const isSearching = !!(params.query && params.query.trim() !== "");
-
-  // Update search when params change (e.g., when clearing from outside)
-  useEffect(() => {
-    setSearch(params.query || "");
-    setTempSearch(params.query || "");
-  }, [params.query]);
-
-  // Handle Enter key press
-  const handleSubmitEditing = () => {
-    if (tempSearch.trim()) {
-      router.setParams({ query: tempSearch.trim() });
-    } else {
-      router.setParams({ query: "" });
-    }
-  };
-
-  const handleSearchChange = (text: string) => {
-    setTempSearch(text); // Only update temp state, don't trigger search
-  };
-
-  const handleClearSearch = () => {
-    setTempSearch("");
-    setSearch("");
-    router.setParams({ query: "" });
-  };
-
-  const handleExitSearch = () => {
-    setTempSearch("");
-    setSearch("");
-    router.setParams({ query: "" });
-    router.push("/");
-  };
-
+  const [searchText, setSearchText] = useState(params.query || "");
+  const debounceTimer = useRef<number | null>(null); // Fix: initialize with null, type as number | null
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
 
-  return (
-    <View>
-      {/* Main Search Input */}
-      <View
-        className="flex flex-row items-center justify-between w-full px-4 rounded-lg bg-accent-100 border border-primary-100 mt-5 py-2"
-        style={{ backgroundColor: theme.navBackground }}
-      >
-        <View className="flex-1 flex flex-row items-center justify-start z-50">
-          <Image source={icons.search} className="size-5" tintColor="#858585" />
-          <TextInput
-            value={tempSearch}
-            onChangeText={handleSearchChange}
-            onSubmitEditing={handleSubmitEditing}
-            returnKeyType="search"
-            placeholder="Search by name, location, or facilities..."
-            placeholderTextColor="#9CA3AF"
-            className="text-sm font-rubik text-black-300 ml-2 flex-1 py-2"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
+  // Sync with URL param changes
+  useEffect(() => {
+    setSearchText(params.query || "");
+  }, [params.query]);
 
-        {/* Exit Search Button */}
-        {isSearching && (
-          <TouchableOpacity
-            onPress={handleExitSearch}
-            className="ml-2 bg-primary-300 px-4 py-2 rounded-lg"
-          >
-            <Text className="text-white font-rubik-medium text-sm">Exit</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+  const handleSearch = (text: string) => {
+    setSearchText(text);
+    if (debounceTimer.current !== null) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    debounceTimer.current = setTimeout(() => {
+      if (text.trim()) {
+        router.setParams({ query: text.trim() });
+      } else {
+        router.setParams({ query: "" });
+      }
+    }, 500);
+  };
+
+  const clearSearch = () => {
+    setSearchText("");
+    if (debounceTimer.current !== null) {
+      clearTimeout(debounceTimer.current);
+    }
+    router.setParams({ query: "" });
+  };
+
+  return (
+    <View
+      className="flex-row items-center px-4 py-2 rounded-full"
+      style={{
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderColor: theme.muted + "40",
+      }}
+    >
+      <Image
+        source={icons.search}
+        className="w-5 h-5"
+        style={{ tintColor: theme.muted }}
+      />
+      <TextInput
+        className="flex-1 ml-2 text-base"
+        placeholder="Search properties..."
+        placeholderTextColor={theme.muted}
+        value={searchText}
+        onChangeText={handleSearch}
+        style={{ color: theme.text }}
+      />
+      {searchText.length > 0 && (
+        <TouchableOpacity onPress={clearSearch}>
+          <Image
+            source={icons.close} // Assuming correct icon name, adjust if needed
+            className="w-6 h-6"
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 };

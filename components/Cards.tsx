@@ -1,5 +1,5 @@
 import icons from "@/constants/icons";
-import images from "@/constants/images";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   Image,
   Text,
@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Models } from "react-native-appwrite";
 import { Colors } from "../constants/Colors";
+
 export interface PropertyDocument extends Models.Document {
   propertyName?: string;
   name?: string;
@@ -17,6 +18,7 @@ export interface PropertyDocument extends Models.Document {
   address?: string;
   price?: number;
   likes?: number;
+  views?: number;
   area?: number;
   bedrooms?: number;
   bathrooms?: number;
@@ -36,8 +38,11 @@ export const FeaturedCard = ({ item, onPress }: Props) => {
   const imageUri = item.image1 || item.image2 || item.image3 || item.image;
   const rating = item.rating ?? 0;
   const title = item.propertyName || item.name || "Property";
+  const likes = item.likes ?? 0;
+  const views = item.views ?? 0;
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
+
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -45,34 +50,60 @@ export const FeaturedCard = ({ item, onPress }: Props) => {
     >
       <Image source={{ uri: imageUri }} className="size-full rounded-2xl" />
 
-      <Image
-        source={images.cardGradient}
-        className="size-full rounded-2xl absolute bottom-0"
+      {/* Dark gradient overlay for better text visibility */}
+      <LinearGradient
+        colors={["transparent", "rgba(0,0,0,0.3)", "rgba(0,0,0,0.6)"]}
+        start={{ x: 0, y: 1 }}
+        end={{ x: 0, y: 1 }}
+        className="absolute bottom-0 left-0 right-0 h-32 rounded-b-2xl"
       />
 
-      <View className="flex flex-row items-center bg-white/90 px-3 py-1.5 rounded-full absolute top-5 right-5">
+      {/* Rating badge */}
+      <View className="flex flex-row items-center bg-white/90 px-3 py-1.5 rounded-full absolute top-5 right-5 z-10">
         <Image source={icons.star} className="size-3.5" />
         <Text className="text-xs font-rubik-bold text-primary-300 ml-1">
-          {rating.toFixed(1)}
+          {rating.toFixed()}
         </Text>
       </View>
 
-      <View className="flex flex-col items-start absolute bottom-5 inset-x-5">
+      {/* Views badge - top left */}
+      {likes > 0 && (
+        <View className="flex flex-row items-center bg-black/50 px-2 py-1 rounded-full absolute top-5 left-5 z-10">
+          <Image source={icons.eye} className="size-5" tintColor="#fff" />
+          <Text className="text-xs font-rubik-bold text-white ml-1">
+            {views}
+          </Text>
+        </View>
+      )}
+
+      {/* Property details at bottom */}
+      <View className="absolute bottom-5 inset-x-5 z-10">
         <Text
           className="text-xl font-rubik-extrabold text-white"
           numberOfLines={1}
         >
           {title}
         </Text>
-        <Text className="text-base font-rubik text-white" numberOfLines={1}>
+        <Text className="text-sm font-rubik text-white/90" numberOfLines={1}>
           {item.address || "Unknown address"}
         </Text>
 
-        <View className="flex flex-row items-center justify-between w-full">
+        <View className="flex flex-row items-center justify-between mt-2">
           <Text className="text-xl font-rubik-extrabold text-white">
             ${item.price ?? 0}
           </Text>
-          <Image source={icons.heart} className="size-5" />
+          <View className="flex flex-row items-center gap-1">
+            <Image
+              source={icons.heart}
+              className="size-4"
+              tintColor="#ffffff"
+            />
+            {likes > 0 && (
+              <Text className="text-xs font-rubik-bold text-white">
+                {likes}
+              </Text>
+            )}
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -83,8 +114,11 @@ export const Card = ({ item, onPress }: Props) => {
   const imageUri = item.image1 || item.image2 || item.image3 || item.image;
   const title = item.propertyName || item.name || "Property";
   const rating = item.rating ?? 0;
+  const likes = item.likes ?? 0;
+  const views = item.views ?? 0;
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
+
   return (
     <TouchableOpacity
       className="flex-1 w-full mt-4 px-3 py-4 rounded-lg shadow-lg shadow-black-100/70 relative"
@@ -94,32 +128,77 @@ export const Card = ({ item, onPress }: Props) => {
       <View className="flex flex-row items-center absolute px-2 top-5 right-5 bg-white/90 p-1 rounded-full z-50">
         <Image source={icons.star} className="size-2.5" />
         <Text className="text-xs font-rubik-bold text-primary-300 ml-0.5">
-          {rating.toFixed(1)}
+          {rating.toFixed()}
         </Text>
       </View>
 
       <Image source={{ uri: imageUri }} className="w-full h-40 rounded-lg" />
 
       <View className="flex flex-col mt-2">
+        {/* Title */}
         <Text
-          className="text-base font-rubik-bold text-black-300"
+          className="text-base font-rubik-bold mb-1"
           style={{ color: theme.title }}
+          numberOfLines={1}
         >
           {title}
         </Text>
-        <Text className="text-xs font-rubik text-black-100">
+
+        {/* Address */}
+        <Text
+          className="text-xs font-rubik mb-2"
+          style={{ color: theme.muted }}
+          numberOfLines={1}
+        >
           {item.address || "Unknown address"}
         </Text>
 
-        <View className="flex flex-row items-center justify-between mt-2">
+        {/* Price and Stats Row */}
+        <View className="flex flex-row items-center justify-between">
+          {/* Price */}
           <Text className="text-base font-rubik-bold text-primary-300">
             ${item.price ?? 0}
+            <Text className="text-xs font-rubik" style={{ color: theme.muted }}>
+              /mo
+            </Text>
           </Text>
-          <Image
-            source={icons.heart}
-            className="w-5 h-5 mr-2"
-            tintColor={theme.primary[300]} // or theme.text, theme.icon, etc.
-          />
+
+          {/* Stats Row */}
+          <View className="flex flex-row items-center gap-3">
+            {/* Views */}
+            {views > 0 && (
+              <View className="flex flex-row items-center gap-1">
+                <Image
+                  source={icons.eye}
+                  className="w-3.5 h-3.5"
+                  style={{ tintColor: theme.muted }}
+                />
+                <Text
+                  className="text-xs font-rubik-medium"
+                  style={{ color: theme.muted }}
+                >
+                  {views}
+                </Text>
+              </View>
+            )}
+
+            {/* Likes */}
+            {likes > 0 && (
+              <View className="flex flex-row items-center gap-1">
+                <Image
+                  source={icons.heart}
+                  className="w-3.5 h-3.5"
+                  style={{ tintColor: "#FF69B4" }}
+                />
+                <Text
+                  className="text-xs font-rubik-medium"
+                  style={{ color: theme.muted }}
+                >
+                  {likes}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
     </TouchableOpacity>

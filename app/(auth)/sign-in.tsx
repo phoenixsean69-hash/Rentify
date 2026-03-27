@@ -1,11 +1,11 @@
-// app/(auth)/sign-in.tsx (or src/screens/SignIn.tsx)
+// app/(auth)/sign-in.tsx
 import CustomInput from "@/components/CustomInput";
 import { Colors } from "@/constants/Colors";
 import images from "@/constants/images";
 import useAuthStore from "@/store/auth.store";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -18,18 +18,27 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import { useAuth } from "../../context/AuthContext";
 
 const SignIn = () => {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, user, fetchAuthenticatedUser } = useAuthStore();
 
-  const fetchAuthenticatedUser = useAuthStore(
-    (state) => state.fetchAuthenticatedUser,
-  );
+  // Navigate based on user mode after successful sign-in
+  useEffect(() => {
+    if (user) {
+      console.log("User detected in SignIn:", user.userMode);
+      console.log("User avatar:", user.avatar);
+
+      if (user.userMode === "tenant") {
+        router.replace("/tenantHome");
+      } else if (user.userMode === "landlord") {
+        router.replace("/landHome");
+      }
+    }
+  }, [user]);
 
   const handleSignIn = async () => {
     if (!email || !password) {
@@ -38,14 +47,23 @@ const SignIn = () => {
     }
 
     setIsLoading(true);
-    const result = await signIn(email, password);
-    setIsLoading(false);
+    try {
+      console.log("Attempting sign in...");
+      const result = await signIn(email, password);
 
-    if (result.success) {
-      await fetchAuthenticatedUser();
-      console.log("Signed in successfully");
-    } else {
-      Alert.alert("Error", result.error);
+      if (result.success) {
+        console.log("Sign-in successful, fetching user data...");
+        await fetchAuthenticatedUser();
+        console.log("User data fetched, navigation will happen via useEffect");
+        // Navigation happens automatically in the useEffect above when user is set
+      } else {
+        Alert.alert("Failed to sign in");
+      }
+    } catch (error) {
+      console.error("Sign-in error");
+      Alert.alert("Error", "An unexpected error occurred");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -62,21 +80,25 @@ const SignIn = () => {
       <View className="flex-1" style={{ backgroundColor: theme.navBackground }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          className="flex-1"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0} // adjust based on your header height
+          style={{ flex: 1 }}
         >
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ flexGrow: 1 }}
-            className="flex-1"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              flexGrow: 1,
+              paddingBottom: 40, // extra space at the bottom so the last inputs clear the keyboard
+            }}
           >
-            {/* House Banner - Same as SignUp */}
+            {/* House Banner */}
             <Image
               source={images.nightHouse2}
               className="w-full h-96"
               resizeMode="cover"
             />
 
-            {/* Content Container - Overlapping effect with rounded top corners */}
+            {/* Content Container */}
             <View
               className="flex-1 px-6 pt-8 pb-8 -mt-8 rounded-t-3xl"
               style={{ backgroundColor: theme.navBackground }}
@@ -105,7 +127,7 @@ const SignIn = () => {
 
               {/* Form */}
               <View className="space-y-4">
-                {/* Email Field - Using CustomInput */}
+                {/* Email Field */}
                 <CustomInput
                   label="Email"
                   value={email}
@@ -115,7 +137,7 @@ const SignIn = () => {
                   autoCapitalize="none"
                 />
 
-                {/* Password Field - Using CustomInput */}
+                {/* Password Field */}
                 <CustomInput
                   label="Password"
                   value={password}
@@ -146,7 +168,9 @@ const SignIn = () => {
 
                 {/* Sign Up Link */}
                 <View className="flex-row justify-center mt-6">
-                  <Text className="text-gray-600">Don't have an account? </Text>
+                  <Text className="text-gray-600">
+                    Don&apos;t have an account?{" "}
+                  </Text>
                   <TouchableOpacity onPress={() => router.push("/sign-up")}>
                     <Text className="text-orange-500 font-semibold">
                       Sign Up

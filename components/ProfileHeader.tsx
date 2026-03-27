@@ -1,29 +1,42 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+// components/ProfileHeader.tsx
+import { Colors } from "@/constants/Colors";
+import icons from "@/constants/icons";
+import { router } from "expo-router";
+import React from "react";
+import {
+  Image,
+  Text,
+  TouchableOpacity,
+  useColorScheme,
+  View,
+  ViewStyle,
+} from "react-native";
 
-type Props = {
+interface ProfileHeaderProps {
   title: string;
+  showBackButton?: boolean;
+  containerStyle?: ViewStyle;
+}
+
+const ProfileHeader = ({
+  title,
+  showBackButton = true,
+  containerStyle,
+}: ProfileHeaderProps) => {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
+  return (
+    <View style={containerStyle} className="flex-row items-center px-5 py-4">
+      {showBackButton && (
+        <TouchableOpacity onPress={() => router.back()} className="mr-4 p-2">
+          <Image source={icons.backArrow} className="w-6 h-6" />
+        </TouchableOpacity>
+      )}
+      <Text className="text-2xl font-rubik-bold" style={{ color: theme.text }}>
+        {title}
+      </Text>
+    </View>
+  );
 };
 
-export default function ProfileHeader({ title }: Props) {
-  const router = useRouter();
-
-  return (
-    <SafeAreaView edges={["top"]} className="bg-white">
-      <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-100">
-        {/* Back Arrow */}
-        <TouchableOpacity onPress={() => router.push("/profile")}>
-          <Ionicons name="arrow-back" size={24} color="#111" />
-        </TouchableOpacity>
-
-        {/* Title */}
-        <Text className="text-xl font-rubik-bold">{title}</Text>
-
-        {/* Spacer for symmetry */}
-        <View style={{ width: 24 }} />
-      </View>
-    </SafeAreaView>
-  );
-}
+export default ProfileHeader;

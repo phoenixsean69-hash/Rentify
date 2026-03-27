@@ -1,14 +1,23 @@
-// app/screens/Home.tsx
+// app/(root)/tenantHome.tsx
+import DealsAlerts from "@/components/DealsAlerts";
 import FeaturedModal from "@/components/FeaturedModal";
-import { useFocusEffect } from "@react-navigation/native";
-import { router, useLocalSearchParams } from "expo-router";
+import QuickActions from "@/components/QuickActions";
+import QuickTips from "@/components/QuickTips";
+import SearchModal from "@/components/SearchModal";
+import {
+  cleanupOldAppwriteNotifications,
+  getAvailableProperties,
+  getBestProperties,
+} from "@/lib/appwrite";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 
 import { Card, FeaturedCard } from "@/components/Cards";
 import Filters from "@/components/Filters";
 import NoResults from "@/components/NoResults";
-import Search from "@/components/Search";
+import PopularLocations from "@/components/popularLocations";
 import icons from "@/constants/icons";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   ActivityIndicator,
   FlatList,
@@ -21,9 +30,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../../../constants/Colors";
 
-import { getAvailableProperties, getLatestProperties } from "@/lib/appwrite"; // ✅ Updated import
 import { useAppwrite } from "@/lib/useAppwrite";
 import useAuthStore from "@/store/auth.store";
+import { useNotificationStore } from "@/store/notification.store";
 import { getSavedAvatar } from "@/utils/avatarStorage";
 
 const getGreeting = () => {
@@ -35,22 +44,80 @@ const getGreeting = () => {
 
 const Home = () => {
   const { user } = useAuthStore();
+  const [featuredProperties, setFeaturedProperties] = useState<any[]>([]);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
   const [avatarId, setAvatarId] = useState<string | null>(null);
   const [loadingAvatar, setLoadingAvatar] = useState(true);
   const [featuredModalVisible, setFeaturedModalVisible] = useState(false);
   const [greeting, setGreeting] = useState(getGreeting());
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
 
-  const params = useLocalSearchParams<{ query?: string; filter?: string }>();
-  const [searchActive, setSearchActive] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
+  const params = useLocalSearchParams<{ filter?: string }>();
+
+  // Get notification unread count
+  const {
+    loadNotifications,
+    cleanupOldNotifications,
+    fetchAppwriteUnreadCount,
+    totalUnreadCount,
+  } = useNotificationStore();
+  const userId = user?.accountId;
+
+  // Load unread count on mount
+  useEffect(() => {
+    if (userId) {
+      loadNotifications(userId);
+      fetchAppwriteUnreadCount(userId);
+    }
+  }, [userId]);
+
+  // Run cleanup on mount
+  useEffect(() => {
+    const runCleanup = async () => {
+      if (userId) {
+        await cleanupOldAppwriteNotifications(userId);
+        await cleanupOldNotifications(userId);
+      }
+    };
+    runCleanup();
+
+    // Optional: Run cleanup every hour
+    const interval = setInterval(
+      () => {
+        if (userId) {
+          cleanupOldAppwriteNotifications(userId);
+          cleanupOldNotifications(userId);
+        }
+      },
+      60 * 60 * 1000,
+    );
+
+    return () => clearInterval(interval);
+  }, [userId]);
+
+  const getHeaderImage = () => {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour < 12) return require("@/assets/images/morning.jpg");
+    if (hour >= 12 && hour < 17)
+      return require("@/assets/images/afternoon.jpg");
+    if (hour >= 17 && hour < 20) return require("@/assets/images/sunset.jpg");
+    return require("@/assets/images/night.jpg");
+  };
 
   // Update greeting every minute
   useEffect(() => {
     const interval = setInterval(() => setGreeting(getGreeting()), 60_000);
     return () => clearInterval(interval);
   }, []);
-
-  // Load avatar when screen focused
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) {
+        loadNotifications(userId);
+        fetchAppwriteUnreadCount(userId);
+      }
+    }, [userId]),
+  );
+  // Load avatar when screen focused (with caching)
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
@@ -71,213 +138,277 @@ const Home = () => {
     }, []),
   );
 
-  // Get latest properties (also filter by availability)
-  const { data: latestProperties, loading: latestPropertiesLoading } =
-    useAppwrite({
-      fn: async () => {
-        const allLatest = await getLatestProperties();
-        // Filter to only show available ones
-        return allLatest.filter((p) => p.isAvailable === true);
-      },
-    });
+  // Fetch best properties for Featured section
+  const fetchBestProperties = async () => {
+    try {
+      setLoadingFeatured(true);
+      const best = await getBestProperties(6); // Get top 6 best properties
+      setFeaturedProperties(best);
+    } catch (error) {
+      console.error("Error fetching best properties:", error);
+      setFeaturedProperties([]);
+    } finally {
+      setLoadingFeatured(false);
+    }
+  };
 
-  // ✅ Use getAvailableProperties instead of getProperties
+  // Load featured properties on mount
+  useEffect(() => {
+    fetchBestProperties();
+  }, []);
+
+  // Get recommended properties with manual refetch
   const {
     data: properties,
     refetch,
     loading,
   } = useAppwrite({
-    fn: getAvailableProperties, // ✅ Updated function
-    params: { filter: params.filter!, query: params.query!, limit: 6 },
-    skip: true,
+    fn: getAvailableProperties,
+    params: { filter: params.filter || "", query: "", limit: 6 },
+    ttl: 30000,
+    skip: false, // initial fetch on mount
   });
 
-  // Handle search query changes
+  // 🔁 Manual refetch when filter changes
   useEffect(() => {
-    const fetchData = async () => {
-      const hasSearchQuery = !!(params.query && params.query.trim() !== "");
-      setSearchActive(hasSearchQuery);
-
-      if (hasSearchQuery) setIsSearching(true);
-
-      await refetch({
-        filter: params.filter!,
-        query: params.query!,
-        limit: 6,
-      });
-
-      setIsSearching(false);
-    };
-    fetchData();
-  }, [params.filter, params.query]);
+    refetch({
+      filter: params.filter || "",
+      query: "",
+      limit: 6,
+    });
+  }, [params.filter]);
 
   const handleCardPress = (id: string) => router.push(`/properties/${id}`);
 
-  // Show featured section only if there are available properties
-  const showFeatured =
-    !searchActive && latestProperties && latestProperties.length > 0;
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
+
   return (
-    <SafeAreaView style={{ backgroundColor: theme.navBackground }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+      {/* Top Header - Enhanced with better overlay */}
+      <View className="relative mb-2">
+        <View className="relative">
+          <Image
+            source={getHeaderImage()}
+            className="w-full h-36 rounded-b-3xl"
+            style={{ opacity: 0.95 }}
+          />
+          <LinearGradient
+            colors={["transparent", "rgba(0,0,0,0.8)"]}
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: "100%",
+              borderBottomLeftRadius: 24,
+              borderBottomRightRadius: 24,
+            }}
+          />
+        </View>
+
+        {/* Overlay User Info */}
+        <View className="absolute inset-0 flex-row items-center justify-between px-6 pt-2">
+          <View className="flex-row items-center">
+            {!loadingAvatar ? (
+              <TouchableOpacity
+                onPress={() => router.push("/profile")}
+                className="shadow-lg"
+              >
+                <Image
+                  source={user?.avatar ? { uri: user.avatar } : icons.person}
+                  className="w-14 h-14 rounded-full border-2 border-white"
+                />
+              </TouchableOpacity>
+            ) : (
+              <View className="w-14 h-14 rounded-full bg-white/20 items-center justify-center">
+                <ActivityIndicator size="small" color="#ffffff" />
+              </View>
+            )}
+            <View className="ml-3">
+              <Text className="text-xs font-rubik text-white/90">
+                {greeting}
+              </Text>
+              <Text className="text-lg font-rubik-bold text-white">
+                {user?.name || "Guest"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Bell Icon with Notification Badge */}
+          <TouchableOpacity
+            onPress={() => router.push("/notifications")}
+            className="bg-white/20 p-2.5 rounded-full relative"
+          >
+            <Image
+              source={icons.bell}
+              className="w-5 h-5"
+              style={{ tintColor: "#ffffff" }}
+            />
+            {totalUnreadCount > 0 && (
+              <View className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-[18px] h-[18px] px-1 items-center justify-center">
+                <Text className="text-white text-xs font-bold">
+                  {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <FlatList
         data={properties}
         numColumns={2}
-        renderItem={({ item }) => (
-          <Card item={item} onPress={() => handleCardPress(item.$id)} />
-        )}
         keyExtractor={(item) => item.$id}
         contentContainerClassName="pb-32"
         columnWrapperClassName="flex gap-5 px-5"
         showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <Card item={item} onPress={() => handleCardPress(item.$id)} />
+        )}
         ListEmptyComponent={
-          loading && !isSearching ? (
-            <ActivityIndicator size="large" className="text-primary-300 mt-5" />
-          ) : !loading &&
-            !isSearching &&
-            (!properties || properties.length === 0) ? (
+          loading ? (
+            <View className="items-center justify-center py-10">
+              <ActivityIndicator size="large" color={theme.title} />
+            </View>
+          ) : !properties || properties.length === 0 ? (
             <NoResults />
           ) : null
         }
         ListHeaderComponent={() => (
           <View className="px-5">
-            {/* Top Header */}
-            {!searchActive && (
-              <View className="flex flex-row items-center justify-between mt-5">
-                <View className="flex flex-row">
-                  {!loadingAvatar ? (
-                    <Image
-                      source={
-                        user?.avatar ? { uri: user.avatar } : icons.person
-                      }
-                      className="size-12 rounded-full"
-                    />
-                  ) : (
-                    <ActivityIndicator
-                      size="small"
-                      className="text-primary-300"
-                    />
-                  )}
-                  <View className="flex flex-col items-start ml-2 justify-center">
-                    <Text
-                      className="text-xs font-rubik text-black-100"
-                      style={{ color: theme.title }}
-                    >
-                      {greeting}
-                    </Text>
-                    <Text
-                      className="text-base font-rubik-medium text-black-300"
-                      style={{ color: theme.title }}
-                    >
-                      {user?.name}
-                    </Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  className="flex flex-row items-center py-4"
-                  onPress={() => router.push("/notifications")}
-                >
-                  <Image source={icons.bell} className="size-6" />
-                </TouchableOpacity>
-              </View>
-            )}
+            {/* Search Button */}
+            <TouchableOpacity
+              onPress={() => setSearchModalVisible(true)}
+              className="flex-row items-center px-4 py-3 rounded-full mb-3"
+              style={{
+                backgroundColor: theme.surface,
+                borderWidth: 1,
+                borderColor: theme.muted + "40",
+              }}
+            >
+              <Image
+                source={icons.search}
+                className="w-5 h-5"
+                style={{ tintColor: theme.muted }}
+              />
+              <Text
+                className="flex-1 ml-2 text-base"
+                style={{ color: theme.muted }}
+              >
+                Search properties...
+              </Text>
+            </TouchableOpacity>
 
-            {/* Search Component */}
-            <Search />
+            {/* Quick Actions */}
+            <View className="mb-6">
+              <QuickActions />
+            </View>
 
-            {/* Featured Section - Only shows available properties */}
-            {showFeatured && (
-              <View className="my-5">
-                <View className="flex flex-row items-center justify-between">
+            {/* Featured Section */}
+            <View className="mb-6">
+              <View className="flex-row items-center justify-between mb-4">
+                <View>
                   <Text
-                    className="text-xl font-rubik-bold text-black-300"
-                    style={{ color: theme.title }}
+                    className="text-2xl font-rubik-bold"
+                    style={{ color: theme.text }}
                   >
                     Featured
                   </Text>
-                  {!searchActive && (
-                    <TouchableOpacity
-                      onPress={() => setFeaturedModalVisible(true)}
-                    >
-                      <Text className="text-base font-rubik-bold text-primary-300">
-                        See all
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+                  <Text className="text-sm text-gray-500 font-rubik mt-0.5">
+                    Top ranked properties for you
+                  </Text>
                 </View>
+                <TouchableOpacity
+                  onPress={() => setFeaturedModalVisible(true)}
+                  className="bg-primary-50 px-4 py-2 rounded-full"
+                >
+                  <Text
+                    className="text-sm font-rubik-medium text-primary-600"
+                    style={{ color: theme.primary[300] }}
+                  >
+                    See all
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-                {latestPropertiesLoading ? (
-                  <ActivityIndicator
-                    size="large"
-                    className="text-primary-300"
+              {loadingFeatured ? (
+                <View className="h-48 items-center justify-center">
+                  <ActivityIndicator size="large" color={theme.primary[300]} />
+                </View>
+              ) : featuredProperties.length === 0 ? (
+                <View
+                  className="h-48 items-center justify-center rounded-2xl"
+                  style={{ backgroundColor: theme.surface }}
+                >
+                  <Image
+                    source={icons.house}
+                    className="w-12 h-12 opacity-30 mb-2"
+                    style={{ tintColor: theme.muted }}
                   />
-                ) : (
-                  <FlatList
-                    data={latestProperties}
-                    renderItem={({ item }) => (
+                  <Text
+                    className="text-sm font-rubik"
+                    style={{ color: theme.muted }}
+                  >
+                    No featured properties yet
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={featuredProperties}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingRight: 20 }}
+                  keyExtractor={(item) => item.$id}
+                  renderItem={({ item }) => (
+                    <View className="mr-4 relative">
                       <FeaturedCard
                         item={item}
                         onPress={() => handleCardPress(item.$id)}
                       />
-                    )}
-                    keyExtractor={(item) => item.$id}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerClassName="flex gap-5 mt-5"
-                  />
-                )}
-              </View>
-            )}
+                    </View>
+                  )}
+                />
+              )}
+            </View>
 
-            {/* Recommendations / Search Results - Only shows available properties */}
-            <View className="mt-5">
-              <View className="flex flex-row items-center justify-between">
+            <PopularLocations />
+            <DealsAlerts />
+            <QuickTips />
+
+            <View className="flex-row items-center justify-between mb-3">
+              <View>
+                {/* Filters */}
+                <View className="mb-4">
+                  <Filters />
+                </View>
+
                 <Text
-                  className="text-xl font-rubik-bold text-black-300"
-                  style={{ color: theme.title }}
+                  className="text-2xl font-rubik-bold"
+                  style={{ color: theme.text }}
                 >
-                  {searchActive ? "Search Results" : "Our Recommendation"}
+                  Recommended
                 </Text>
-                {!searchActive && <TouchableOpacity></TouchableOpacity>}
+                <Text className="text-sm text-gray-500 font-rubik">
+                  Places you might like
+                </Text>
               </View>
-
-              {!searchActive && <Filters />}
-
-              {searchActive &&
-                !isSearching &&
-                !loading &&
-                (!properties || properties.length === 0) && (
-                  <View className="mt-5 p-4 bg-primary-100 rounded-lg">
-                    <Text className="text-center text-black-200 font-rubik">
-                      {`No available properties found matching "${params.query}"`}
-                    </Text>
-                    <Text className="text-center text-black-100 text-sm mt-2">
-                      Try adjusting your search
-                    </Text>
-                  </View>
-                )}
             </View>
           </View>
         )}
       />
 
-      {/* Featured Properties Modal - Only shows available properties */}
       <FeaturedModal
         visible={featuredModalVisible}
         onClose={() => setFeaturedModalVisible(false)}
-        properties={latestProperties || []}
+        properties={featuredProperties}
         onPropertyPress={handleCardPress}
       />
 
-      {/* Searching Overlay */}
-      {isSearching && searchActive && (
-        <View className="absolute inset-0 bg-white/80 backdrop-blur-sm items-center justify-center z-50">
-          <ActivityIndicator size="large" className="text-primary-300" />
-          <Text className="text-black-300 font-rubik-medium mt-4 text-center">
-            Searching...
-          </Text>
-        </View>
-      )}
+      <SearchModal
+        visible={searchModalVisible}
+        onClose={() => setSearchModalVisible(false)}
+      />
     </SafeAreaView>
   );
 };

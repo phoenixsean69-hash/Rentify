@@ -1,13 +1,17 @@
 // app/(auth)/sign-up.tsx
 import CustomInput from "@/components/CustomInput";
+import ErrorModal from "@/components/ErrorModal";
+import OperationSuccesfull from "@/components/OperationSuccesfull";
 import { Colors } from "@/constants/Colors";
 import images from "@/constants/images";
+import { uploadImage } from "@/lib/appwrite";
 import useAuthStore from "@/store/auth.store";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -19,7 +23,6 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import { useAuth } from "../../context/AuthContext";
 
 interface FormData {
   name: string;
@@ -33,6 +36,9 @@ interface FormData {
 
 const SignUp = () => {
   const router = useRouter();
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [formData, setFormData] = useState<FormData>({
     name: "",
     userMode: "",
@@ -42,18 +48,20 @@ const SignUp = () => {
     confirmPassword: "",
     avatar: "",
   });
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const { signUp, user } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const { signUp, user, isAuthenticated } = useAuthStore();
 
-  useEffect(() => {
-    if (user) {
+  // Redirect when user is authenticated
+  React.useEffect(() => {
+    if (user && isAuthenticated) {
       if (user.userMode === "tenant") {
         router.replace("/tenantHome");
       } else if (user.userMode === "landlord") {
         router.replace("/landHome");
       }
     }
-  }, [user, router]);
+  }, [user, isAuthenticated, router]);
 
   const pickImage = async () => {
     try {
@@ -71,6 +79,7 @@ const SignUp = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         quality: 0.7,
+        aspect: [1, 1],
       });
 
       if (!result.canceled) {
@@ -85,13 +94,8 @@ const SignUp = () => {
     }
   };
 
-  const fetchAuthenticatedUser = useAuthStore(
-    (state) => state.fetchAuthenticatedUser,
-  );
-
-  // app/(auth)/sign-up.tsx (updated handleSignUp)
   const handleSignUp = async () => {
-    // Validate required fields
+    // Validate all fields
     if (!formData.name?.trim()) {
       Alert.alert("Validation Error", "Please enter your full name");
       return;
@@ -130,7 +134,6 @@ const SignUp = () => {
       return;
     }
 
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       Alert.alert("Validation Error", "Please enter a valid email address");
@@ -138,34 +141,55 @@ const SignUp = () => {
     }
 
     setIsLoading(true);
+    let uploadedAvatarUrl = "";
 
     try {
+      // Upload avatar if selected
+      if (formData.avatar) {
+        setUploadingAvatar(true);
+        try {
+          console.log("📸 Uploading avatar...");
+          uploadedAvatarUrl = await uploadImage({
+            uri: formData.avatar,
+            fileName: `avatar_${Date.now()}.jpg`,
+            mimeType: "image/jpeg",
+          });
+          console.log("✅ Avatar uploaded:", uploadedAvatarUrl);
+        } catch (uploadError) {
+          console.error("Error uploading avatar:", uploadError);
+          // Continue with sign-up even if avatar upload fails
+          Alert.alert(
+            "Warning",
+            "Could not upload avatar. You can add one later.",
+          );
+        } finally {
+          setUploadingAvatar(false);
+        }
+      }
+
       console.log("Attempting signup with:", formData.email);
       const result = await signUp({
-        ...formData,
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        phone: formData.phone,
         userMode: formData.userMode as "tenant" | "landlord",
+        avatar: uploadedAvatarUrl, // Pass the uploaded URL
       });
 
       console.log("Signup result:", result);
 
       if (result.success) {
-        Alert.alert("Success", "Account created successfully!", [
-          { text: "OK" },
-        ]);
-        await fetchAuthenticatedUser();
+        setShowSuccess(true);
+        // The useEffect will handle redirect when user is set
       } else {
-        Alert.alert(
-          "Sign Up Failed",
-          result.error ||
-            "Could not create account. Please check your information and try again.",
-        );
+        setErrorMessage(result.error || "Could not create account");
+        setErrorModalVisible(true);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Sign up error:", error);
-      Alert.alert(
-        "Error",
-        "An unexpected error occurred. Please check your internet connection and try again.",
-      );
+      setErrorMessage(error?.message || "An unexpected error occurred");
+      setErrorModalVisible(true);
     } finally {
       setIsLoading(false);
     }
@@ -184,43 +208,52 @@ const SignUp = () => {
       <View className="flex-1" style={{ backgroundColor: theme.navBackground }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          className="flex-1"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+          style={{ flex: 1 }}
         >
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ flexGrow: 1 }}
-            className="flex-1"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              flexGrow: 1,
+              paddingBottom: 40,
+            }}
           >
-            {/* House Banner - Now from the very top */}
+            {/* House Banner */}
             <Image
               source={images.dayHouse}
               className="w-full h-96"
               resizeMode="cover"
             />
 
-            {/* Content Container - Overlapping effect with rounded top corners */}
+            {/* Content Container */}
             <View
               className="flex-1 px-6 pt-8 pb-8 -mt-8 rounded-t-3xl"
               style={{ backgroundColor: theme.navBackground }}
             >
-              {/* Title */}
               <Text
                 className="text-3xl font-semibold text-gray-900 mb-2"
                 style={{ color: theme.title }}
               >
                 Create account
               </Text>
-              <Text className=" text-base mb-8" style={{ color: theme.title }}>
+              <Text className="text-base mb-8" style={{ color: theme.title }}>
                 Sign up to get started
               </Text>
 
               {/* Avatar Upload */}
               <TouchableOpacity
                 onPress={pickImage}
+                disabled={uploadingAvatar}
                 className="items-center mb-8"
               >
-                <View className="w-20 h-20 rounded-full bg-gray-100 items-center justify-center border border-gray-200">
-                  {formData.avatar ? (
+                <View className="w-20 h-20 rounded-full bg-gray-300 items-center justify-center border border-gray-200 relative">
+                  {uploadingAvatar ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.primary[300]}
+                    />
+                  ) : formData.avatar ? (
                     <Image
                       source={{ uri: formData.avatar }}
                       className="w-20 h-20 rounded-full"
@@ -229,14 +262,13 @@ const SignUp = () => {
                     <Ionicons name="camera-outline" size={24} color="#9CA3AF" />
                   )}
                 </View>
-                <Text className="text-sm text-gray-500 mt-2">
-                  Add photo (optional)
+                <Text className="text-sm text-gray-500 font-rubik-medium mt-2">
+                  {uploadingAvatar ? "Uploading..." : "Add Profile photo"}
                 </Text>
               </TouchableOpacity>
 
-              {/* Form */}
+              {/* Form Fields */}
               <View className="space-y-4">
-                {/* Full Name */}
                 <CustomInput
                   label="Full name"
                   value={formData.name}
@@ -246,7 +278,6 @@ const SignUp = () => {
                   placeholder="Enter your full name"
                 />
 
-                {/* Email */}
                 <CustomInput
                   label="Email"
                   value={formData.email}
@@ -258,7 +289,6 @@ const SignUp = () => {
                   autoCapitalize="none"
                 />
 
-                {/* Phone */}
                 <CustomInput
                   label="Phone number"
                   value={formData.phone}
@@ -271,8 +301,8 @@ const SignUp = () => {
 
                 {/* User Mode Toggle */}
                 <View className="mb-4">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    User Mode
+                  <Text className="text-sm font-medium text-gray-500 font-rubik-medium mb-2">
+                    Select Your User Mode
                   </Text>
                   <View className="flex-row justify-between bg-gray-100 rounded-2xl p-1.5">
                     <TouchableOpacity
@@ -290,7 +320,7 @@ const SignUp = () => {
                             : "text-gray-700"
                         }`}
                       >
-                        Renter
+                        Tenant
                       </Text>
                     </TouchableOpacity>
 
@@ -315,7 +345,6 @@ const SignUp = () => {
                   </View>
                 </View>
 
-                {/* Password */}
                 <CustomInput
                   label="Password"
                   value={formData.password}
@@ -326,7 +355,6 @@ const SignUp = () => {
                   secureTextEntry
                 />
 
-                {/* Confirm Password */}
                 <CustomInput
                   label="Confirm password"
                   value={formData.confirmPassword}
@@ -340,14 +368,23 @@ const SignUp = () => {
                 {/* Sign Up Button */}
                 <TouchableOpacity
                   onPress={handleSignUp}
-                  disabled={isLoading}
+                  disabled={isLoading || uploadingAvatar}
                   className={`w-full py-4 rounded-2xl mt-6 ${
-                    isLoading ? "bg-orange-500" : "bg-blue-600"
+                    isLoading || uploadingAvatar ? "bg-gray-400" : "bg-blue-600"
                   }`}
                 >
-                  <Text className="text-white text-center font-semibold text-base">
-                    {isLoading ? "Creating account..." : "Sign Up"}
-                  </Text>
+                  {isLoading ? (
+                    <View className="flex-row items-center justify-center">
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Text className="text-white text-center font-semibold text-base ml-2">
+                        Creating account...
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text className="text-white text-center font-semibold text-base">
+                      Sign Up
+                    </Text>
+                  )}
                 </TouchableOpacity>
 
                 {/* Sign In Link */}
@@ -365,6 +402,24 @@ const SignUp = () => {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {/* Success Modal */}
+        <OperationSuccesfull
+          visible={showSuccess}
+          onClose={() => {
+            setShowSuccess(false);
+          }}
+          title="Account Created!"
+          message="Your account has been created successfully. Redirecting..."
+        />
+
+        {/* Error Modal */}
+        <ErrorModal
+          visible={errorModalVisible}
+          onClose={() => setErrorModalVisible(false)}
+          title="Sign Up Failed"
+          message={errorMessage}
+        />
       </View>
     </>
   );

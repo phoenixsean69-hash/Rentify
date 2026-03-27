@@ -2,6 +2,7 @@ import { Tabs } from "expo-router";
 import {
   Image,
   ImageSourcePropType,
+  LogBox,
   Text,
   View,
   useColorScheme,
@@ -9,6 +10,25 @@ import {
 
 import icons from "@/constants/icons";
 import { Colors } from "../../../constants/Colors";
+
+// Ignore specific warnings that are not critical
+LogBox.ignoreLogs([
+  "JSON Parse error",
+  "Error parsing reviews",
+  "Setting a timer",
+]);
+
+// Optional: Ignore all warnings in production
+if (!__DEV__) {
+  LogBox.ignoreAllLogs();
+}
+// Ignore specific Appwrite-related errors
+LogBox.ignoreLogs([
+  "JSON Parse error: Unexpected character: G",
+  "Error parsing reviews",
+  "Error fetchingagent",
+  "Error checking like status",
+]);
 
 const TabIcon = ({
   focused,
@@ -66,6 +86,101 @@ const TabsLayout = () => {
           tabBarIcon: ({ focused }) => (
             <TabIcon focused={focused} icon={icons.home} title="Home" />
           ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="about"
+        options={{
+          href: null,
+          title: "about",
+          headerShown: false,
+        }}
+      />
+
+      <Tabs.Screen
+        name="help"
+        options={{
+          href: null,
+          title: "help",
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          href: null,
+          title: "help",
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="language"
+        options={{
+          href: null,
+          title: "language",
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+          title: "notifications",
+          headerShown: false,
+        }}
+      />
+
+      <Tabs.Screen
+        name="properties-by-location"
+        options={{
+          href: null,
+          title: "notifications",
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="trending-properties"
+        options={{
+          href: null,
+          title: "notifications",
+          headerShown: false,
+        }}
+      />
+
+      <Tabs.Screen
+        name="filtered-properties"
+        options={{
+          href: null,
+          title: "notifications",
+          headerShown: false,
+        }}
+      />
+
+      <Tabs.Screen
+        name="settings"
+        options={{
+          href: null,
+          title: "settings",
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="my-favorites"
+        options={{
+          href: null,
+          title: "my-favorites",
+          headerShown: false,
+        }}
+      />
+
+      <Tabs.Screen
+        name="message"
+        options={{
+          href: null,
+          title: "my-favorites",
+          headerShown: false,
+          tabBarStyle: { display: "none" },
         }}
       />
       <Tabs.Screen

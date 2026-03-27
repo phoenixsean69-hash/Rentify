@@ -13,6 +13,19 @@ import bed2 from "@/assets/images/bed2.jpg";
 import cardGradient from "@/assets/images/card-gradient.png";
 import dayHouse from "@/assets/images/dayHouse.jpg";
 import dayHouse2 from "@/assets/images/dayHouse2.jpg";
+import foundHome from "@/assets/images/foundHome.jpg";
+import happyStudents from "@/assets/images/happyStudents.jpg";
+import human1 from "@/assets/images/human-1.jpg";
+import human10 from "@/assets/images/human-10.png";
+import human2 from "@/assets/images/human-2.jpg";
+import human3 from "@/assets/images/human-3.jpg";
+import human4 from "@/assets/images/human-4.jpg";
+import human5 from "@/assets/images/human-5.jpg";
+import human6 from "@/assets/images/human-6.jpg";
+import human7 from "@/assets/images/human-7.jpg";
+import human8 from "@/assets/images/human-8.jpg";
+import human9 from "@/assets/images/human-9.jpg";
+import { default as appLogo, default as icon } from "@/assets/images/icon.png";
 import japan from "@/assets/images/japan.png";
 import lounge1 from "@/assets/images/lounge-1.jpg";
 import lounge10 from "@/assets/images/lounge-10.jpg";
@@ -27,16 +40,33 @@ import lounge6 from "@/assets/images/lounge-6.jpg";
 import lounge7 from "@/assets/images/lounge-7.jpg";
 import lounge8 from "@/assets/images/lounge-8.jpg";
 import lounge9 from "@/assets/images/lounge-9.jpg";
+import manageProperty from "@/assets/images/manageProperty.jpg";
 import map from "@/assets/images/map.png";
+import meetingAgent from "@/assets/images/meetingAgent.jpg";
 import newYork from "@/assets/images/new-york.png";
 import nightHouse1 from "@/assets/images/nightHouse1.jpg";
 import nightHouse2 from "@/assets/images/nightHouse2.jpg";
 import nightHouse3 from "@/assets/images/NightHouse3.jpg";
 import noResult from "@/assets/images/no-result.png";
 import onboarding from "@/assets/images/onboarding.png";
-import whiteGradient from "@/assets/images/white-gradient.png";
 
 export default {
+  icon,
+  manageProperty,
+  meetingAgent,
+  happyStudents,
+  foundHome,
+  appLogo,
+  human1,
+  human2,
+  human3,
+  human4,
+  human5,
+  human6,
+  human7,
+  human8,
+  human9,
+  human10,
   lounge1,
   lounge2,
   lounge3,
@@ -71,7 +101,6 @@ export default {
   japan,
   cardGradient,
   barChart,
-  whiteGradient,
   map,
   noResult,
 };

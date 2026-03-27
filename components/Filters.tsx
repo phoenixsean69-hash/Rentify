@@ -1,6 +1,7 @@
+// components/Filters.tsx
 import { categories } from "@/constants/data";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ScrollView,
   Text,
@@ -14,17 +15,43 @@ const Filters = () => {
   const [selectedCategory, setSelectedCategory] = useState(
     params.filter || "All",
   );
+  const isUpdating = useRef(false);
 
-  const handleCategoryPress = (category: string) => {
-    if (selectedCategory === category) {
-      setSelectedCategory("");
-      router.setParams({ filter: "" });
-      return;
+  // Sync with URL params when they change externally
+  useEffect(() => {
+    if (!isUpdating.current) {
+      setSelectedCategory(params.filter || "All");
     }
+  }, [params.filter]);
 
-    setSelectedCategory(category);
-    router.setParams({ filter: category });
-  };
+  const handleCategoryPress = useCallback(
+    (category: string) => {
+      // Prevent multiple rapid updates
+      if (isUpdating.current) return;
+
+      isUpdating.current = true;
+
+      try {
+        const newFilter = selectedCategory === category ? "" : category;
+
+        // Update local state immediately for responsive UI
+        setSelectedCategory(newFilter || "All");
+
+        // Update URL params
+        router.setParams({ filter: newFilter });
+
+        // Reset the updating flag after a short delay
+        setTimeout(() => {
+          isUpdating.current = false;
+        }, 100);
+      } catch (error) {
+        console.error("Error updating filter:", error);
+        isUpdating.current = false;
+      }
+    },
+    [selectedCategory],
+  );
+
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
 
@@ -34,33 +61,33 @@ const Filters = () => {
       showsHorizontalScrollIndicator={false}
       className="mt-3 mb-2"
     >
-      {categories.map((item, index) => (
-        <TouchableOpacity
-          onPress={() => handleCategoryPress(item.category)}
-          key={index}
-          className={`flex flex-col items-start mr-4 px-4 py-2 rounded-full ${
-            selectedCategory === item.category
-              ? "bg-primary-300"
-              : "bg-primary-100 border border-primary-200"
-          }`}
-        >
-          <Text
-            className={`text-sm ${
-              selectedCategory === item.category
-                ? "font-rubik-bold mt-0.5"
-                : "font-rubik"
+      {categories.map((item, index) => {
+        const isSelected = selectedCategory === item.category;
+
+        return (
+          <TouchableOpacity
+            onPress={() => handleCategoryPress(item.category)}
+            key={index}
+            className={`flex flex-col items-start mr-4 px-4 py-2 rounded-full ${
+              isSelected
+                ? "bg-primary-300"
+                : "bg-primary-100 border border-primary-200"
             }`}
-            style={{
-              color:
-                selectedCategory === item.category
-                  ? theme.title // or theme.background or whatever your white color is called
-                  : theme.title, // or theme.textLight
-            }}
+            activeOpacity={0.7}
           >
-            {item.title}
-          </Text>
-        </TouchableOpacity>
-      ))}
+            <Text
+              className={`text-sm ${
+                isSelected ? "font-rubik-bold mt-0.5" : "font-rubik"
+              }`}
+              style={{
+                color: isSelected ? "#FFFFFF" : theme.title,
+              }}
+            >
+              {item.title}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </ScrollView>
   );
 };

@@ -1,5 +1,8 @@
 // app/landlord/myDashboard.tsx
+import ErrorModal from "@/components/ErrorModal";
 import MyPropertiesModal from "@/components/myPropertiesModal";
+import OperationSuccesfull from "@/components/OperationSuccesfull";
+import { Colors } from "@/constants/Colors";
 import icons from "@/constants/icons";
 import { config, databases, getRecentActivities } from "@/lib/appwrite";
 import useAuthStore from "@/store/auth.store";
@@ -8,6 +11,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Image,
   Modal,
   RefreshControl,
@@ -15,10 +19,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useColorScheme,
   View,
 } from "react-native";
 import { Query } from "react-native-appwrite";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+const { width } = Dimensions.get("window");
 
 interface PropertySummary {
   $id: string;
@@ -46,8 +53,12 @@ interface DashboardStats {
   averageRating: number;
   totalViews: number;
 }
+const TAB_BAR_HEIGHT = 70;
 
 export default function LandlordDashboard() {
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,6 +91,40 @@ export default function LandlordDashboard() {
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
+
+  // Calculate additional metrics
+  const availableProperties = properties.filter(
+    (p) => p.isAvailable === true,
+  ).length;
+  const occupancyRate =
+    stats.totalProperties > 0
+      ? (availableProperties / stats.totalProperties) * 100
+      : 0;
+
+  // Get top performing property
+  const topProperty =
+    properties.length > 0
+      ? [...properties].sort((a, b) => (b.likes || 0) - (a.likes || 0))[0]
+      : null;
+
+  // Quick actions data
+  const quickActions = [
+    {
+      icon: icons.plus,
+      label: "Add Property",
+      onPress: () => router.push("/addProperty"),
+      color: "#10B981",
+    },
+    {
+      icon: icons.calendar,
+      label: "Calendar",
+      onPress: () => router.push("/calendar"),
+      color: "#F59E0B",
+    },
+  ];
+
   // ============================================================================
   // FETCH DASHBOARD DATA
   // ============================================================================
@@ -98,30 +143,54 @@ export default function LandlordDashboard() {
         ],
       );
 
-      const propertyList = propertiesResult.documents.map((doc) => ({
-        $id: doc.$id,
-        propertyName: doc.propertyName || "Unnamed Property",
-        type: doc.type || "Property",
-        address: doc.address || "",
-        price: doc.price || 0,
-        description: doc.description || "",
-        bedrooms: doc.bedrooms || 0,
-        bathrooms: doc.bathrooms || 0,
-        area: doc.area || 0,
-        image1: doc.image1,
-        image2: doc.image2,
-        image3: doc.image3,
-        rating: doc.rating || 0,
-        likes: doc.likes || 0,
-        views: Math.floor(Math.random() * 100), // Placeholder - replace with real view tracking
-        createdAt: doc.$createdAt,
-      }));
+      const propertyList = propertiesResult.documents.map((doc) => {
+        // Calculate rating from reviews JSON
+        let rating = 0;
+        if (doc.reviews) {
+          try {
+            const parsedReviews = JSON.parse(doc.reviews);
+            if (parsedReviews.length > 0) {
+              const sum = parsedReviews.reduce(
+                (acc: number, r: any) => acc + (r.rating || 0),
+                0,
+              );
+              rating = Number((sum / parsedReviews.length).toFixed(1));
+            }
+          } catch (e) {
+            rating = 0;
+          }
+        }
+
+        return {
+          $id: doc.$id,
+          propertyName: doc.propertyName || "Unnamed Property",
+          type: doc.type || "Property",
+          address: doc.address || "",
+          price: doc.price || 0,
+          description: doc.description || "",
+          bedrooms: doc.bedrooms || 0,
+          bathrooms: doc.bathrooms || 0,
+          area: doc.area || 0,
+          image1: doc.image1,
+          image2: doc.image2,
+          image3: doc.image3,
+          rating,
+          likes: doc.likes || 0,
+          views: doc.views || 0,
+          isAvailable: doc.isAvailable !== false,
+          createdAt: doc.$createdAt,
+        };
+      });
 
       setProperties(propertyList);
 
       // Calculate stats
       const totalLikes = propertyList.reduce(
         (sum, p) => sum + (p.likes || 0),
+        0,
+      );
+      const totalViews = propertyList.reduce(
+        (sum, p) => sum + (p.views || 0),
         0,
       );
       const avgRating =
@@ -134,10 +203,10 @@ export default function LandlordDashboard() {
         totalProperties: propertyList.length,
         totalLikes,
         averageRating: Number(avgRating.toFixed(1)),
-        totalViews: propertyList.reduce((sum, p) => sum + (p.views || 0), 0),
+        totalViews,
       });
 
-      // ✅ GET REAL ACTIVITIES FROM DATABASE
+      // Get real activities from database
       const activities = await getRecentActivities(user.accountId, 10);
       setRecentActivity(activities);
     } catch (error) {
@@ -211,7 +280,6 @@ export default function LandlordDashboard() {
   const handleSaveEdit = async () => {
     if (!editingProperty) return;
 
-    // Validation
     if (!editForm.propertyName.trim() || !editForm.price.trim()) {
       Alert.alert("Error", "Property name and price are required");
       return;
@@ -236,7 +304,6 @@ export default function LandlordDashboard() {
         },
       );
 
-      // Update local state
       const updatedProperties = properties.map((p) =>
         p.$id === editingProperty.$id
           ? {
@@ -255,11 +322,11 @@ export default function LandlordDashboard() {
       );
       setProperties(updatedProperties);
 
-      Alert.alert("Success", "Property updated successfully");
+      setShowSuccess(true);
       closeEditModal();
     } catch (error) {
       console.error("Error updating property:", error);
-      Alert.alert("Error", "Failed to update property");
+      setErrorModalVisible(true);
     } finally {
       setSavingEdit(false);
     }
@@ -269,7 +336,14 @@ export default function LandlordDashboard() {
   // STAT CARD COMPONENT
   // ============================================================================
   const StatCard = ({ title, value, icon, color }: any) => (
-    <View className="bg-white p-4 rounded-xl flex-1 shadow-sm border border-gray-100">
+    <View
+      className="p-4 rounded-xl flex-1 shadow-sm"
+      style={{
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderColor: theme.muted + "30",
+      }}
+    >
       <View className="flex-row items-center mb-2">
         <View
           style={{ backgroundColor: color + "20" }}
@@ -282,8 +356,12 @@ export default function LandlordDashboard() {
           />
         </View>
       </View>
-      <Text className="text-2xl font-rubik-bold text-black-300">{value}</Text>
-      <Text className="text-xs text-gray-500 font-rubik">{title}</Text>
+      <Text className="text-2xl font-rubik-bold" style={{ color: theme.title }}>
+        {value}
+      </Text>
+      <Text className="text-xs font-rubik" style={{ color: theme.muted }}>
+        {title}
+      </Text>
     </View>
   );
 
@@ -298,144 +376,232 @@ export default function LandlordDashboard() {
       onRequestClose={closeEditModal}
     >
       <View className="flex-1 justify-end bg-black/50">
-        <View className="bg-white rounded-t-3xl h-5/6">
-          <View className="flex-row justify-between items-center p-6 border-b border-gray-200">
-            <Text className="text-xl font-rubik-bold text-black-300">
+        <View
+          className="rounded-t-3xl h-5/6"
+          style={{ backgroundColor: theme.background }}
+        >
+          <View
+            className="flex-row justify-between items-center p-6 border-b"
+            style={{ borderBottomColor: theme.muted + "30" }}
+          >
+            <Text
+              className="text-xl font-rubik-bold"
+              style={{ color: theme.title }}
+            >
               Edit Property
             </Text>
             <TouchableOpacity onPress={closeEditModal}>
-              <Text className="text-2xl">✕</Text>
+              <Text className="text-2xl" style={{ color: theme.text }}>
+                ✕
+              </Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView className="p-6" showsVerticalScrollIndicator={false}>
-            {/* Property Name */}
             <View className="mb-4">
-              <Text className="text-sm font-rubik-medium text-gray-700 mb-1">
+              <Text
+                className="text-sm font-rubik-medium mb-1"
+                style={{ color: theme.text }}
+              >
                 Property Name <Text className="text-red-500">*</Text>
               </Text>
               <TextInput
                 value={editForm.propertyName}
                 onChangeText={(text) => handleEditChange("propertyName", text)}
-                className="border border-gray-300 px-4 py-3 rounded-lg bg-gray-50"
+                className="border px-4 py-3 rounded-lg"
+                style={{
+                  backgroundColor: theme.surface,
+                  borderColor: theme.muted + "50",
+                  color: theme.text,
+                }}
                 placeholder="e.g. Sunset Apartments"
+                placeholderTextColor={theme.muted}
               />
             </View>
 
-            {/* Type */}
             <View className="mb-4">
-              <Text className="text-sm font-rubik-medium text-gray-700 mb-1">
+              <Text
+                className="text-sm font-rubik-medium mb-1"
+                style={{ color: theme.text }}
+              >
                 Property Type
               </Text>
               <TextInput
                 value={editForm.type}
                 onChangeText={(text) => handleEditChange("type", text)}
-                className="border border-gray-300 px-4 py-3 rounded-lg bg-gray-50"
+                className="border px-4 py-3 rounded-lg"
+                style={{
+                  backgroundColor: theme.surface,
+                  borderColor: theme.muted + "50",
+                  color: theme.text,
+                }}
                 placeholder="e.g. Apartment, House"
+                placeholderTextColor={theme.muted}
               />
             </View>
 
-            {/* Address */}
             <View className="mb-4">
-              <Text className="text-sm font-rubik-medium text-gray-700 mb-1">
+              <Text
+                className="text-sm font-rubik-medium mb-1"
+                style={{ color: theme.text }}
+              >
                 Address
               </Text>
               <TextInput
                 value={editForm.address}
                 onChangeText={(text) => handleEditChange("address", text)}
-                className="border border-gray-300 px-4 py-3 rounded-lg bg-gray-50"
+                className="border px-4 py-3 rounded-lg"
+                style={{
+                  backgroundColor: theme.surface,
+                  borderColor: theme.muted + "50",
+                  color: theme.text,
+                }}
                 placeholder="Full address"
+                placeholderTextColor={theme.muted}
               />
             </View>
 
-            {/* Price */}
             <View className="mb-4">
-              <Text className="text-sm font-rubik-medium text-gray-700 mb-1">
+              <Text
+                className="text-sm font-rubik-medium mb-1"
+                style={{ color: theme.text }}
+              >
                 Price (per month) <Text className="text-red-500">*</Text>
               </Text>
-              <View className="flex-row items-center border border-gray-300 rounded-lg bg-gray-50">
-                <Text className="px-3 text-gray-500 font-rubik-medium">$</Text>
+              <View
+                className="flex-row items-center border rounded-lg"
+                style={{
+                  backgroundColor: theme.surface,
+                  borderColor: theme.muted + "50",
+                }}
+              >
+                <Text
+                  className="px-3 font-rubik-medium"
+                  style={{ color: theme.muted }}
+                >
+                  $
+                </Text>
                 <TextInput
                   value={editForm.price}
                   onChangeText={(text) => handleEditChange("price", text)}
                   keyboardType="numeric"
                   className="flex-1 px-4 py-3"
+                  style={{ color: theme.text }}
                   placeholder="1500"
+                  placeholderTextColor={theme.muted}
                 />
               </View>
             </View>
 
-            {/* Bedrooms & Bathrooms row */}
             <View className="flex-row gap-4 mb-4">
               <View className="flex-1">
-                <Text className="text-sm font-rubik-medium text-gray-700 mb-1">
+                <Text
+                  className="text-sm font-rubik-medium mb-1"
+                  style={{ color: theme.text }}
+                >
                   Bedrooms
                 </Text>
                 <TextInput
                   value={editForm.bedrooms}
                   onChangeText={(text) => handleEditChange("bedrooms", text)}
                   keyboardType="numeric"
-                  className="border border-gray-300 px-4 py-3 rounded-lg bg-gray-50"
+                  className="border px-4 py-3 rounded-lg"
+                  style={{
+                    backgroundColor: theme.surface,
+                    borderColor: theme.muted + "50",
+                    color: theme.text,
+                  }}
                   placeholder="2"
+                  placeholderTextColor={theme.muted}
                 />
               </View>
               <View className="flex-1">
-                <Text className="text-sm font-rubik-medium text-gray-700 mb-1">
+                <Text
+                  className="text-sm font-rubik-medium mb-1"
+                  style={{ color: theme.text }}
+                >
                   Bathrooms
                 </Text>
                 <TextInput
                   value={editForm.bathrooms}
                   onChangeText={(text) => handleEditChange("bathrooms", text)}
                   keyboardType="numeric"
-                  className="border border-gray-300 px-4 py-3 rounded-lg bg-gray-50"
+                  className="border px-4 py-3 rounded-lg"
+                  style={{
+                    backgroundColor: theme.surface,
+                    borderColor: theme.muted + "50",
+                    color: theme.text,
+                  }}
                   placeholder="1"
+                  placeholderTextColor={theme.muted}
                 />
               </View>
             </View>
 
-            {/* Area */}
             <View className="mb-4">
-              <Text className="text-sm font-rubik-medium text-gray-700 mb-1">
+              <Text
+                className="text-sm font-rubik-medium mb-1"
+                style={{ color: theme.text }}
+              >
                 Area (sq ft)
               </Text>
               <TextInput
                 value={editForm.area}
                 onChangeText={(text) => handleEditChange("area", text)}
                 keyboardType="numeric"
-                className="border border-gray-300 px-4 py-3 rounded-lg bg-gray-50"
+                className="border px-4 py-3 rounded-lg"
+                style={{
+                  backgroundColor: theme.surface,
+                  borderColor: theme.muted + "50",
+                  color: theme.text,
+                }}
                 placeholder="850"
+                placeholderTextColor={theme.muted}
               />
             </View>
 
-            {/* Description */}
             <View className="mb-6">
-              <Text className="text-sm font-rubik-medium text-gray-700 mb-1">
+              <Text
+                className="text-sm font-rubik-medium mb-1"
+                style={{ color: theme.text }}
+              >
                 Description
               </Text>
               <TextInput
                 value={editForm.description}
                 onChangeText={(text) => handleEditChange("description", text)}
-                className="border border-gray-300 px-4 py-3 rounded-lg bg-gray-50 h-24"
+                className="border px-4 py-3 rounded-lg h-24"
+                style={{
+                  backgroundColor: theme.surface,
+                  borderColor: theme.muted + "50",
+                  color: theme.text,
+                }}
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
                 placeholder="Describe your property..."
+                placeholderTextColor={theme.muted}
               />
             </View>
 
-            {/* AVAILABILITY TOGGLE */}
             <View className="mb-6">
-              <Text className="text-sm font-rubik-medium text-gray-700 mb-3">
+              <Text
+                className="text-sm font-rubik-medium mb-3"
+                style={{ color: theme.text }}
+              >
                 Availability Status
               </Text>
 
               <TouchableOpacity
                 onPress={toggleAvailability}
                 className={`flex-row items-center justify-between p-4 rounded-xl border ${
-                  editForm.isAvailable
-                    ? "bg-green-50 border-green-300"
-                    : "bg-red-50 border-red-300"
+                  editForm.isAvailable ? "border-green-300" : "border-red-300"
                 }`}
+                style={{
+                  backgroundColor: editForm.isAvailable
+                    ? theme.primary[100]
+                    : theme.danger + "20",
+                }}
               >
                 <View className="flex-row items-center">
                   <View
@@ -452,12 +618,15 @@ export default function LandlordDashboard() {
                     </Text>
                   </View>
                   <View className="ml-3">
-                    <Text className="text-base font-rubik-bold text-black-300">
+                    <Text
+                      className="text-base font-rubik-bold"
+                      style={{ color: theme.text }}
+                    >
                       {editForm.isAvailable
                         ? "Available for Rent"
                         : "Not Available"}
                     </Text>
-                    <Text className="text-xs text-gray-500">
+                    <Text className="text-xs" style={{ color: theme.muted }}>
                       {editForm.isAvailable
                         ? "Property is visible to tenants"
                         : "Property is hidden from search"}
@@ -465,7 +634,6 @@ export default function LandlordDashboard() {
                   </View>
                 </View>
 
-                {/* Toggle Switch */}
                 <View
                   className={`w-12 h-6 rounded-full ${
                     editForm.isAvailable ? "bg-green-500" : "bg-gray-300"
@@ -480,13 +648,16 @@ export default function LandlordDashboard() {
               </TouchableOpacity>
             </View>
 
-            {/* Action Buttons */}
             <View className="flex-row gap-3 mb-10">
               <TouchableOpacity
                 onPress={closeEditModal}
-                className="flex-1 border border-gray-300 py-4 rounded-full"
+                className="flex-1 py-4 rounded-full border"
+                style={{ borderColor: theme.muted + "50" }}
               >
-                <Text className="text-center text-gray-600 font-rubik-bold">
+                <Text
+                  className="text-center font-rubik-bold"
+                  style={{ color: theme.text }}
+                >
                   Cancel
                 </Text>
               </TouchableOpacity>
@@ -513,26 +684,42 @@ export default function LandlordDashboard() {
   // ============================================================================
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-white justify-center items-center">
-        <ActivityIndicator size="large" className="text-primary-300" />
-        <Text className="mt-4 text-gray-600">Loading dashboard...</Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color={theme.primary[300]} />
+          <Text className="mt-4" style={{ color: theme.muted }}>
+            Loading dashboard...
+          </Text>
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT + 1 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.primary[300]]}
+            tintColor={theme.primary[300]}
+          />
         }
       >
         {/* Header */}
-        <View className="px-6 pt-4 pb-2 bg-white">
+        <View
+          className="px-6 pt-4 pb-2"
+          style={{ backgroundColor: theme.background }}
+        >
           <View className="flex-row justify-between items-center">
             <View>
-              <Text className="text-2xl font-rubik-bold text-black-300">
+              <Text
+                className="text-2xl font-rubik-bold"
+                style={{ color: theme.title }}
+              >
                 Welcome back,
               </Text>
               <Text className="text-xl font-rubik-medium text-primary-300">
@@ -540,17 +727,43 @@ export default function LandlordDashboard() {
               </Text>
             </View>
             <TouchableOpacity
-              onPress={() => router.push("/notifications")}
-              className="bg-gray-100 p-2 rounded-full"
+              onPress={() => router.push("/landLordNotifications")}
+              className="p-2 rounded-full"
+              style={{ backgroundColor: theme.surface }}
             >
-              <Image source={icons.bell} className="size-6" />
+              <Image
+                source={icons.bell}
+                className="size-6"
+                style={{ tintColor: theme.text }}
+              />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Stats Section */}
-        <View className="px-6 mt-6">
-          <Text className="text-lg font-rubik-bold text-black-300 mb-4">
+        {/* Welcome Banner */}
+        <View className="mx-6 mt-4 mb-2">
+          <View
+            className="p-5 rounded-2xl"
+            style={{ backgroundColor: theme.primary[100] }}
+          >
+            <Text
+              className="text-lg font-rubik-bold"
+              style={{ color: theme.title }}
+            >
+              📊 Dashboard Overview
+            </Text>
+            <Text className="text-sm mt-1" style={{ color: theme.muted }}>
+              Track your property performance and manage your listings
+            </Text>
+          </View>
+        </View>
+
+        {/* Stats Grid */}
+        <View className="px-6 mt-4">
+          <Text
+            className="text-lg font-rubik-bold mb-4"
+            style={{ color: theme.title }}
+          >
             Overview
           </Text>
           <View className="flex-row gap-3">
@@ -581,32 +794,174 @@ export default function LandlordDashboard() {
               color="#10B981"
             />
           </View>
+
+          {/* Additional Metrics */}
+          <View className="flex-row gap-3 mt-3">
+            <View
+              className="flex-1 rounded-xl p-4"
+              style={{
+                backgroundColor: theme.surface,
+                borderWidth: 1,
+                borderColor: theme.muted + "30",
+              }}
+            >
+              <View className="flex-row items-center mb-2">
+                <Image
+                  source={icons.check}
+                  className="w-5 h-5"
+                  style={{ tintColor: "#10B981" }}
+                />
+              </View>
+              <Text
+                className="text-2xl font-rubik-bold"
+                style={{ color: theme.title }}
+              >
+                {availableProperties}
+              </Text>
+              <Text className="text-xs" style={{ color: theme.muted }}>
+                Available Properties
+              </Text>
+            </View>
+
+            <View
+              className="flex-1 rounded-xl p-4"
+              style={{
+                backgroundColor: theme.surface,
+                borderWidth: 1,
+                borderColor: theme.muted + "30",
+              }}
+            >
+              <View className="flex-row items-center mb-2">
+                <Image
+                  source={icons.bookmark}
+                  className="w-5 h-5"
+                  style={{ tintColor: "#F59E0B" }}
+                />
+              </View>
+              <Text
+                className="text-2xl font-rubik-bold"
+                style={{ color: theme.title }}
+              >
+                {Math.round(occupancyRate)}%
+              </Text>
+              <Text className="text-xs" style={{ color: theme.muted }}>
+                Occupancy Rate
+              </Text>
+            </View>
+          </View>
         </View>
 
         {/* Quick Actions */}
         <View className="px-6 mt-6">
-          <Text className="text-lg font-rubik-bold text-black-300 mb-3">
+          <Text
+            className="text-lg font-rubik-bold mb-3"
+            style={{ color: theme.title }}
+          >
             Quick Actions
           </Text>
-          <View className="flex-row gap-3">
-            <TouchableOpacity
-              onPress={handleAddProperty}
-              className="flex-1 bg-primary-300 p-4 rounded-xl flex-row items-center justify-center"
-            >
-              <Image
-                source={icons.plus}
-                className="size-5 mr-2"
-                style={{ tintColor: "white" }}
-              />
-              <Text className="text-white font-rubik-bold">Add Property</Text>
-            </TouchableOpacity>
+          <View className="flex-row justify-between gap-3">
+            {quickActions.map((action, index) => (
+              <TouchableOpacity
+                key={index}
+                onPress={action.onPress}
+                className="flex-1 items-center py-3 rounded-xl"
+                style={{ backgroundColor: theme.surface }}
+              >
+                <Image
+                  source={action.icon}
+                  className="w-6 h-6 mb-2"
+                  style={{ tintColor: action.color }}
+                />
+                <Text
+                  className="text-xs font-rubik-medium"
+                  style={{ color: theme.text }}
+                >
+                  {action.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
+        {/* Top Performing Property */}
+        {topProperty && (
+          <View className="px-6 mt-6">
+            <Text
+              className="text-lg font-rubik-bold mb-3"
+              style={{ color: theme.title }}
+            >
+              Top Performing
+            </Text>
+            <TouchableOpacity
+              onPress={() => handlePropertyPress(topProperty.$id)}
+              className="rounded-xl overflow-hidden"
+              style={{ backgroundColor: theme.surface }}
+            >
+              <View className="flex-row p-4">
+                <View className="w-20 h-20 rounded-lg overflow-hidden mr-3">
+                  {topProperty.image1 ? (
+                    <Image
+                      source={{ uri: topProperty.image2 }}
+                      className="w-full h-full"
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      className="w-full h-full items-center justify-center"
+                      style={{ backgroundColor: theme.muted + "20" }}
+                    >
+                      <Image
+                        source={icons.house}
+                        className="w-8 h-8 opacity-30"
+                      />
+                    </View>
+                  )}
+                </View>
+                <View className="flex-1">
+                  <Text
+                    className="font-rubik-bold"
+                    style={{ color: theme.title }}
+                  >
+                    {topProperty.propertyName}
+                  </Text>
+                  <Text className="text-xs mt-1" style={{ color: theme.muted }}>
+                    {topProperty.address}
+                  </Text>
+                  <View className="flex-row items-center mt-2 gap-3">
+                    <View className="flex-row items-center">
+                      <Image
+                        source={icons.like}
+                        className="w-3 h-3 mr-1"
+                        style={{ tintColor: "#FF69B4" }}
+                      />
+                      <Text className="text-xs" style={{ color: theme.muted }}>
+                        {topProperty.likes || 0} likes
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center">
+                      <Image
+                        source={icons.eye}
+                        className="w-3 h-3 mr-1"
+                        style={{ tintColor: "#10B981" }}
+                      />
+                      <Text className="text-xs" style={{ color: theme.muted }}>
+                        {topProperty.views || 0} views
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Properties List */}
-        <View className="px-6 mt-6">
+        <View className="px-6 mt-6 pb-10">
           <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-lg font-rubik-bold text-black-300">
+            <Text
+              className="text-lg font-rubik-bold"
+              style={{ color: theme.title }}
+            >
               Your Properties
             </Text>
             {properties.length > 0 && (
@@ -619,12 +974,28 @@ export default function LandlordDashboard() {
           </View>
 
           {properties.length === 0 ? (
-            <View className="bg-white p-8 rounded-xl items-center border border-dashed border-gray-300">
-              <Image source={icons.home} className="size-16 mb-4 opacity-30" />
-              <Text className="text-gray-500 text-center font-rubik-medium mb-2">
+            <View
+              className="p-8 rounded-xl items-center border border-dashed"
+              style={{
+                backgroundColor: theme.surface,
+                borderColor: theme.muted + "50",
+              }}
+            >
+              <Image
+                source={icons.home}
+                className="size-16 mb-4 opacity-30"
+                style={{ tintColor: theme.muted }}
+              />
+              <Text
+                className="text-center font-rubik-medium mb-2"
+                style={{ color: theme.text }}
+              >
                 No properties yet
               </Text>
-              <Text className="text-gray-400 text-center text-sm mb-4">
+              <Text
+                className="text-center text-sm mb-4"
+                style={{ color: theme.muted }}
+              >
                 Start by adding your first property
               </Text>
               <TouchableOpacity
@@ -638,15 +1009,19 @@ export default function LandlordDashboard() {
             properties.slice(0, 3).map((property) => (
               <View
                 key={property.$id}
-                className="bg-white p-4 rounded-xl mb-3 shadow-sm border border-gray-100"
+                className="p-4 rounded-xl mb-3"
+                style={{
+                  backgroundColor: theme.surface,
+                  borderWidth: 1,
+                  borderColor: theme.muted + "30",
+                }}
               >
                 <TouchableOpacity
                   onPress={() => handlePropertyPress(property.$id)}
                   activeOpacity={0.7}
                 >
                   <View className="flex-row">
-                    {/* Property Image */}
-                    <View className="w-20 h-20 bg-gray-200 rounded-lg overflow-hidden mr-3">
+                    <View className="w-20 h-20 rounded-lg overflow-hidden mr-3">
                       {property.image1 ? (
                         <Image
                           source={{ uri: property.image1 }}
@@ -654,38 +1029,48 @@ export default function LandlordDashboard() {
                           resizeMode="cover"
                         />
                       ) : (
-                        <View className="w-full h-full items-center justify-center">
+                        <View
+                          className="w-full h-full items-center justify-center"
+                          style={{ backgroundColor: theme.muted + "20" }}
+                        >
                           <Image
                             source={icons.home}
                             className="size-8 opacity-30"
+                            style={{ tintColor: theme.muted }}
                           />
                         </View>
                       )}
                     </View>
 
-                    {/* Property Details */}
                     <View className="flex-1">
                       <View className="flex-row justify-between">
-                        <Text className="text-base font-rubik-bold text-black-300 flex-1">
+                        <Text
+                          className="text-base font-rubik-bold flex-1"
+                          style={{ color: theme.title }}
+                        >
                           {property.propertyName}
                         </Text>
                         <View className="flex-row items-center">
                           <Image source={icons.star} className="size-3 mr-1" />
-                          <Text className="text-sm text-gray-600">
-                            {property.rating?.toFixed(1) || "0.0"}
+                          <Text
+                            className="text-sm"
+                            style={{ color: theme.muted }}
+                          >
+                            {property.rating?.toFixed() || "0"}
                           </Text>
                         </View>
                       </View>
 
                       <Text
-                        className="text-xs text-gray-500 mt-1"
+                        className="text-xs mt-1"
+                        style={{ color: theme.muted }}
                         numberOfLines={1}
                       >
                         {property.address}
                       </Text>
 
                       <View className="flex-row justify-between items-center mt-2">
-                        <Text className="text-primary-300 font-rubik-bold">
+                        <Text className="font-rubik-bold text-primary-300">
                           ${property.price.toLocaleString()}
                           <Text className="text-primary-300 text-xs">
                             {property.type === "Boarding" ? "/head" : "/mo"}
@@ -697,7 +1082,10 @@ export default function LandlordDashboard() {
                             className="size-4 mr-1"
                             style={{ tintColor: "#FF69B4" }}
                           />
-                          <Text className="text-xs text-gray-600 mr-3">
+                          <Text
+                            className="text-xs mr-3"
+                            style={{ color: theme.muted }}
+                          >
                             {property.likes || 0}
                           </Text>
                           <Image
@@ -705,7 +1093,10 @@ export default function LandlordDashboard() {
                             className="size-4 mr-1"
                             style={{ tintColor: "#10B981" }}
                           />
-                          <Text className="text-xs text-gray-600">
+                          <Text
+                            className="text-xs"
+                            style={{ color: theme.muted }}
+                          >
                             {property.views || 0}
                           </Text>
                         </View>
@@ -714,10 +1105,9 @@ export default function LandlordDashboard() {
                   </View>
                 </TouchableOpacity>
 
-                {/* Edit Button */}
                 <TouchableOpacity
                   onPress={() => openEditModal(property)}
-                  className="mt-3 border border-primary-300 py-2 rounded-full"
+                  className="mt-3 py-2 rounded-full border border-primary-300"
                 >
                   <Text className="text-primary-300 text-center font-rubik-bold text-sm">
                     Edit Property
@@ -739,6 +1129,21 @@ export default function LandlordDashboard() {
 
       {/* Edit Modal */}
       {renderEditModal()}
+      <OperationSuccesfull
+        visible={showSuccess}
+        onClose={() => {
+          setShowSuccess(false);
+          router.replace("/landHome");
+        }}
+        title="Deleted Successfully"
+        message="Property has been removed from your listings."
+      />
+      <ErrorModal
+        visible={errorModalVisible}
+        onClose={() => setErrorModalVisible(false)}
+        title="Oops!"
+        message={errorMessage}
+      />
     </SafeAreaView>
   );
 }

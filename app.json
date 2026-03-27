@@ -1,35 +1,49 @@
 {
   "expo": {
-    "name": "Rentify",
-    "slug": "Rentify",
+    "name": "Nookly",
+    "slug": "Nookly",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "rentify",
+    "scheme": "nookly",
     "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.shon1123.Nookly",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/onboarding.png",
-        "backgroundImage": "./assets/images/onboarding.png",
-        "monochromeImage": "./assets/images/onboarding.png"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundImage": "./assets/images/icon.png",
+        "monochromeImage": "./assets/images/icon.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.shon1123.Rentify"
+      "package": "com.shon1123.Nookly",
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ]
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#E6F4FE",
@@ -47,9 +61,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a12dd98b-3705-46b8-80a1-7a93d248c911"
+        "projectId": "23b4dfab-873d-4455-afa3-62a0c4ac31ca"
       }
     },
-    "owner": "shon1123"
+    "owner": "phoenix69"
   }
 }
