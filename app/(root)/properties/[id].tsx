@@ -1,6 +1,8 @@
 // app/properties/[id].tsx
+import ConfirmationModal from "@/components/ConfirmationModal";
 import ErrorModal from "@/components/ErrorModal";
 import OperationSuccesfull from "@/components/OperationSuccesfull";
+import { RequestData, RequestModal } from "@/components/RequestModal";
 import ReviewSuccessModal from "@/components/ReviewSuccessModal";
 import { facilities, getAvatarSource } from "@/constants/data";
 import icons from "@/constants/icons";
@@ -33,7 +35,6 @@ import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   BackHandler,
   Dimensions,
   FlatList,
@@ -57,7 +58,7 @@ import {
 // ============================================================================
 // TYPES
 // ============================================================================
-interface PropertyData {
+export interface PropertyData {
   $id: string;
   propertyName?: string;
   type: string;
@@ -109,7 +110,6 @@ const Property = () => {
   const { user } = useAuthStore();
   const windowHeight = Dimensions.get("window").height;
   const [isFav, setIsFav] = useState(false);
-
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
   const scale = useSharedValue(1);
@@ -137,6 +137,8 @@ const Property = () => {
   const [rating, setRating] = useState(5);
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestModalLoading, setRequestModalLoading] = useState(false);
 
   // ============================================================================
   // LIKE STATE
@@ -176,6 +178,18 @@ const Property = () => {
   const [deleting, setDeleting] = useState(false);
   const [agentData, setAgentData] = useState<any>(null);
   const [loadingAgent, setLoadingAgent] = useState(false);
+  const [confirmationModalVisible, setConfirmationModalVisible] =
+    useState(false);
+  const [propertyToDelete, setPropertyToDelete] = useState<string | null>(null);
+  const [operationSuccessVisible, setOperationSuccessVisible] = useState(false);
+  const [operationSuccessConfig, setOperationSuccessConfig] = useState({
+    title: "",
+    message: "",
+  });
+  const [errorModalConfig, setErrorModalConfig] = useState({
+    title: "",
+    message: "",
+  });
 
   // Check if current user owns this property
   const isLandlordOwner =
@@ -320,7 +334,11 @@ const Property = () => {
     if (!property) return;
 
     if (!editForm.propertyName.trim() || !editForm.price.trim()) {
-      Alert.alert("Error", "Property name and price are required");
+      setErrorModalConfig({
+        title: "Validation Error",
+        message: "Property name and price are required",
+      });
+      setErrorModalVisible(true);
       return;
     }
 
@@ -340,38 +358,66 @@ const Property = () => {
           type: editForm.type,
           address: editForm.address,
           isAvailable: editForm.isAvailable,
-          facilities: editSelectedFacilities.join(", "), // ← Save facilities
+          facilities: editSelectedFacilities.join(", "),
         },
       );
 
-      // Refresh property data
       await refetch({ id: property.$id });
 
-      setShowSuccess(true);
+      setOperationSuccessConfig({
+        title: "Success",
+        message: "Property updated successfully!",
+      });
+      setOperationSuccessVisible(true);
       closeEditModal();
     } catch (error) {
       console.error("Error updating property:", error);
-      setErrorMessage("Failed to update property. Please try again.");
+      setErrorModalConfig({
+        title: "Error",
+        message: "Failed to update property. Please try again.",
+      });
       setErrorModalVisible(true);
     } finally {
       setSavingEdit(false);
     }
   };
 
-  const handleRequest = async () => {
-    if (!property || !user?.accountId || hasRequested) return;
-    setRequesting(true);
+  const handleSendDetailedRequest = async (data: RequestData) => {
+    if (!property || !user?.accountId) return;
+
+    setRequestModalLoading(true);
     try {
-      await requestProperty(property.$id, user.accountId);
+      await requestProperty(property.$id, user.accountId, {
+        proposedPrice: data.proposedPrice,
+        message: data.message,
+        moveInDate: data.moveInDate,
+        leaseDuration: data.leaseDuration,
+        questions: data.questions,
+        originalPrice: property.price,
+        propertyName: property.propertyName,
+        tenantName: user.name,
+        tenantEmail: user.email,
+      });
+
       setHasRequested(true);
-      Alert.alert(
-        "Request Sent",
-        "Your rental request has been sent to the landlord.",
-      );
+      setRequestStatus("pending");
+      setShowRequestModal(false);
+
+      setOperationSuccessConfig({
+        title: "Request Sent!",
+        message:
+          "Your rental request has been sent to the landlord. You'll be notified when they respond.",
+      });
+      setOperationSuccessVisible(true);
     } catch (error) {
-      Alert.alert("Error", "Failed to send request. Please try again.");
+      console.error("Error sending request:", error);
+      setErrorModalConfig({
+        title: "Error",
+        message: "Failed to send request. Please try again.",
+      });
+      setErrorModalVisible(true);
     } finally {
-      setRequesting(false);
+      setRequestModalLoading(false);
     }
   };
 
@@ -382,9 +428,14 @@ const Property = () => {
       if (isFav) {
         await removeFromFavorites(property.$id);
         setIsFav(false);
-        Alert.alert("Removed", "Property removed from favorites");
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+        setOperationSuccessConfig({
+          title: "Removed",
+          message: `${property.propertyName || "Property"} removed from favorites`,
+        });
+        setOperationSuccessVisible(true);
       } else {
-        // Create a clean property object for storage
         const favoriteProperty = {
           $id: property.$id,
           propertyName: property.propertyName,
@@ -395,15 +446,33 @@ const Property = () => {
           image2: property.image2,
           image3: property.image3,
           rating: property.rating,
+          views: property.views,
+          bedrooms: property.bedrooms,
+          bathrooms: property.bathrooms,
+          facilities: property.facilities,
+          creatorId: property.creatorId,
+          landlordName: property.creatorName,
+          landlordEmail: property.creatorEmail,
+          landlordPhone: property.creatorPhone,
         };
 
         await addToFavorites(favoriteProperty);
         setIsFav(true);
-        Alert.alert("Added", "Property added to favorites");
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        setOperationSuccessConfig({
+          title: "Added",
+          message: `${property.propertyName || "Property"} saved to favorites`,
+        });
+        setOperationSuccessVisible(true);
       }
     } catch (error) {
       console.error("Error toggling favorite:", error);
-      Alert.alert("Error", "Failed to update favorites");
+      setErrorModalConfig({
+        title: "Error",
+        message: "Failed to update favorites. Please try again.",
+      });
+      setErrorModalVisible(true);
     }
   };
 
@@ -450,10 +519,10 @@ const Property = () => {
     if (property && user?.userMode === "tenant" && !viewRecorded.current) {
       viewRecorded.current = true;
 
-      // Increment DB views
-      incrementPropertyViews(property.$id).catch(console.error);
+      // Increment DB views with 24-hour cooldown
+      incrementPropertyViews(property.$id, user.accountId).catch(console.error);
 
-      // Record local view for stats (unique properties)
+      // Record local view for stats (unique properties - one time only)
       const recordLocalView = async () => {
         const key = `user_viewed_properties_${user.accountId}`;
         const stored = await AsyncStorage.getItem(key);
@@ -461,6 +530,13 @@ const Property = () => {
         if (!viewed.includes(property.$id)) {
           viewed.push(property.$id);
           await AsyncStorage.setItem(key, JSON.stringify(viewed));
+          console.log(
+            `✅ Property ${property.$id} added to user's unique viewed list`,
+          );
+        } else {
+          console.log(
+            `📌 Property ${property.$id} already in unique viewed list`,
+          );
         }
       };
       recordLocalView().catch(console.error);
@@ -548,18 +624,13 @@ const Property = () => {
     };
   }, [property, user]);
 
-  // ============================================================================
-  // HANDLE ADD REVIEW - NOW USING THE APPWRITE addReview FUNCTION
-  // ============================================================================
   const [reviewSuccessVisible, setReviewSuccessVisible] = useState(false);
   const handleAddReview = async () => {
     if (!property || !reviewText.trim() || user?.userMode !== "tenant") return;
 
     try {
-      // Call the appwrite function that saves review AND creates notification
       await addReview(property.$id, reviewText, rating);
 
-      // Refresh reviews after adding
       const updatedProperty = await getPropertyById({ id: property.$id });
       if (updatedProperty?.reviews) {
         try {
@@ -570,14 +641,16 @@ const Property = () => {
         }
       }
 
-      // Clear form
       setReviewText("");
       setRating(5);
-
       setReviewSuccessVisible(true);
     } catch (err) {
       console.error("Error adding review:", err);
-      Alert.alert("Error", "Failed to add review");
+      setErrorModalConfig({
+        title: "Error",
+        message: "Failed to add review. Please try again.",
+      });
+      setErrorModalVisible(true);
     }
   };
 
@@ -588,10 +661,8 @@ const Property = () => {
     if (!property || !user?.accountId || user?.userMode !== "tenant") return;
 
     try {
-      // ⚡ HAPTIC FEEDBACK
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      // ❤️ POP ANIMATION
       scale.value = 1.3;
       scale.value = withSpring(1, {
         damping: 4,
@@ -603,7 +674,11 @@ const Property = () => {
       setLikeCount(result.likeCount);
     } catch (err) {
       console.error("Error toggling like:", err);
-      Alert.alert("Error", "Failed to update like");
+      setErrorModalConfig({
+        title: "Error",
+        message: "Failed to update like. Please try again.",
+      });
+      setErrorModalVisible(true);
     }
   };
 
@@ -655,31 +730,33 @@ const Property = () => {
   // ============================================================================
   const handleDeleteProperty = () => {
     if (!property) return;
+    setPropertyToDelete(property.$id);
+    setConfirmationModalVisible(true);
+  };
 
-    Alert.alert(
-      "Delete Property",
-      "Are you sure you want to delete this property? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await deleteProperty(property.$id);
-              Alert.alert("Success", "Property deleted successfully", [
-                { text: "OK", onPress: () => router.replace("/landHome") },
-              ]);
-            } catch (error) {
-              console.error("Error deleting property:", error);
-              Alert.alert("Error", "Failed to delete property");
-              setDeleting(false);
-            }
-          },
-        },
-      ],
-    );
+  const confirmDeleteProperty = async () => {
+    if (!propertyToDelete) return;
+
+    setDeleting(true);
+    setConfirmationModalVisible(false);
+
+    try {
+      await deleteProperty(propertyToDelete);
+      setOperationSuccessConfig({
+        title: "Success",
+        message: "Property deleted successfully",
+      });
+      setOperationSuccessVisible(true);
+      setTimeout(() => router.replace("/landHome"), 1500);
+    } catch (error) {
+      console.error("Error deleting property:", error);
+      setErrorModalConfig({
+        title: "Error",
+        message: "Failed to delete property",
+      });
+      setErrorModalVisible(true);
+      setDeleting(false);
+    }
   };
 
   const navigation = useNavigation();
@@ -725,7 +802,6 @@ const Property = () => {
           backgroundColor: theme.navBackground,
         }}
       >
-        {/* Main Image */}
         {/* Main Image */}
         {mainImage ? (
           <Image
@@ -903,7 +979,7 @@ const Property = () => {
 
             {/* REQUEST BUTTON */}
             <TouchableOpacity
-              onPress={handleRequest}
+              onPress={() => setShowRequestModal(true)}
               disabled={
                 requesting || (hasRequested && requestStatus !== "rejected")
               }
@@ -928,7 +1004,7 @@ const Property = () => {
                       ? "Try Again"
                       : requesting
                         ? "Requesting..."
-                        : "Request"}
+                        : "Request to Rent"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1368,7 +1444,7 @@ const Property = () => {
             style={{ color: theme.text }}
           >
             {property.type === "Boarding"
-              ? `$${property.price} /head`
+              ? `$${property.price} /head/room`
               : `$${property.price} /month`}
           </Text>
 
@@ -2213,7 +2289,7 @@ const Property = () => {
       {/* BOTTOM BAR - ONLY FOR TENANTS */}
       {isTenant && (
         <View
-          className="absolute bottom-2 w-full rounded-t-2xl border-t border-r border-l border-primary-200 p-4"
+          className="absolute bottom-10 w-full rounded-t-2xl border-t border-r border-l border-primary-200 p-4"
           style={{
             backgroundColor: theme.navBackground,
             borderTopColor: theme.muted + "30",
@@ -2221,15 +2297,21 @@ const Property = () => {
         >
           <View className="flex flex-row items-center justify-between">
             <View className="flex flex-col items-start">
-              <Text
-                className="text-black-200 text-xs font-rubik-medium"
-                style={{ color: theme.muted }}
-              >
+              <Text className="text-orange-500 text-xs font-rubik-medium">
                 Price
               </Text>
               <Text className="text-lg font-rubik-bold text-primary-300">
                 ${property.price || 0}
-                <Text style={{ color: theme.muted }}> /month</Text>
+                <Text
+                  className="text-lg font-rubik-medium"
+                  style={{ color: theme.muted }}
+                >
+                  {property.type === "Boarding"
+                    ? "/head"
+                    : property.type === "Luxury"
+                      ? "/night"
+                      : "/month"}
+                </Text>
               </Text>
             </View>
 
@@ -2289,6 +2371,45 @@ const Property = () => {
         onClose={() => setErrorModalVisible(false)}
         title="Oops!"
         message={errorMessage}
+      />
+      {/* Request Modal */}
+      <RequestModal
+        visible={showRequestModal}
+        onClose={() => setShowRequestModal(false)}
+        onSubmit={handleSendDetailedRequest}
+        propertyName={property?.propertyName || "this property"}
+        currentPrice={property?.price || 0}
+        isLoading={requestModalLoading}
+      />
+
+      {/* Keep your existing modals */}
+      {renderEditModal()}
+      <ReviewSuccessModal
+        visible={reviewSuccessVisible}
+        onClose={() => setReviewSuccessVisible(false)}
+        message="Your review has been posted successfully."
+      />
+      <OperationSuccesfull
+        visible={showSuccess}
+        onClose={() => setShowSuccess(false)}
+        title="Updated Successfully"
+        message="Property has been updated."
+      />
+      <ErrorModal
+        visible={errorModalVisible}
+        onClose={() => setErrorModalVisible(false)}
+        title="Oops!"
+        message={errorMessage}
+      />
+      <ConfirmationModal
+        visible={confirmationModalVisible}
+        onClose={() => setConfirmationModalVisible(false)}
+        onConfirm={confirmDeleteProperty}
+        title="Delete Property"
+        message="Are you sure you want to delete this property? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        danger={true}
       />
     </View>
   );

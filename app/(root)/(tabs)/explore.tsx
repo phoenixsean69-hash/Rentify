@@ -15,16 +15,23 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Card } from "@/components/Cards";
 import Filters from "@/components/Filters";
 import NoResults from "@/components/NoResults";
+import { PriceFilterButton } from "@/components/PriceFilterButton";
 import SearchModal from "@/components/SearchModal";
 import icons from "@/constants/icons";
 
 import { Colors } from "@/constants/Colors";
-import { getAvailableProperties } from "@/lib/appwrite";
+import { getPropertiesWithPriceFilter, PriceRange } from "@/lib/appwrite";
 import { useAppwrite } from "@/lib/useAppwrite";
 
 const Explore = () => {
-  const params = useLocalSearchParams<{ filter?: string }>();
+  const params = useLocalSearchParams<{ filter?: string; query?: string }>();
   const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [selectedPriceRange, setSelectedPriceRange] = useState<
+    PriceRange | undefined
+  >();
+  const [selectedCustomPrice, setSelectedCustomPrice] = useState<
+    { min: number; max: number } | undefined
+  >();
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
 
@@ -33,22 +40,47 @@ const Explore = () => {
     refetch,
     loading,
   } = useAppwrite({
-    fn: getAvailableProperties,
-    params: { filter: params.filter || "", query: "", limit: 20 },
+    fn: (params: any) => getPropertiesWithPriceFilter(params),
+    params: {
+      filter: params.filter || "",
+      query: params.query || "",
+      limit: 20,
+      priceRange: selectedPriceRange as any,
+      customPrice: selectedCustomPrice,
+    },
     ttl: 30000,
     skip: false,
   });
 
-  // Refetch when filter changes (manual to ensure it's immediate)
+  // Refetch when filter, query, or price range changes
   useEffect(() => {
     refetch({
       filter: params.filter || "",
-      query: "",
+      query: params.query || "",
       limit: 20,
+      priceRange: selectedPriceRange as any,
+      customPrice: selectedCustomPrice,
     });
-  }, [params.filter]);
+  }, [params.filter, params.query, selectedPriceRange, selectedCustomPrice]);
 
   const handleCardPress = (id: string) => router.push(`/properties/${id}`);
+
+  const handlePriceChange = (
+    priceRange?: PriceRange,
+    customPrice?: { min: number; max: number },
+  ) => {
+    setSelectedPriceRange(priceRange);
+    setSelectedCustomPrice(customPrice);
+  };
+
+  // Get active filter count for badge
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (params.filter && params.filter !== "All") count++;
+    if (selectedPriceRange || selectedCustomPrice) count++;
+    if (params.query) count++;
+    return count;
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
@@ -82,7 +114,7 @@ const Explore = () => {
                 className="text-xl text-center font-rubik-bold mt-1"
                 style={{ color: theme.muted }}
               >
-                Discover your next home
+                Discover your next Property
               </Text>
             </View>
 
@@ -105,17 +137,114 @@ const Explore = () => {
                 className="flex-1 ml-2 text-base"
                 style={{ color: theme.muted }}
               >
-                Search properties...
+                {params.query
+                  ? `Search: "${params.query}"`
+                  : "Search properties..."}
               </Text>
+              {params.query && (
+                <TouchableOpacity
+                  onPress={() => {
+                    router.setParams({ query: "" });
+                  }}
+                >
+                  <Image
+                    source={icons.close}
+                    className="w-5 h-5"
+                    style={{ tintColor: theme.muted }}
+                  />
+                </TouchableOpacity>
+              )}
             </TouchableOpacity>
 
-            {/* Filters */}
-            <View className="mt-5">
-              <Filters />
+            {/* Filter Row - Type Filter and Price Filter */}
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-1">
+                <Filters />
+              </View>
+              <View className="ml-2">
+                <PriceFilterButton
+                  onPriceChange={handlePriceChange}
+                  currentPriceRange={selectedPriceRange}
+                  currentCustomPrice={selectedCustomPrice}
+                />
+              </View>
             </View>
 
+            {/* Active Filters Display */}
+            {getActiveFilterCount() > 0 && (
+              <View className="flex-row flex-wrap gap-2 mt-2 mb-3">
+                {params.filter && params.filter !== "All" && (
+                  <View
+                    className="px-2 py-1 rounded-full"
+                    style={{ backgroundColor: theme.primary[100] }}
+                  ></View>
+                )}
+                {(selectedPriceRange || selectedCustomPrice) && (
+                  <View
+                    className="px-2 py-1 rounded-full flex-row items-center"
+                    style={{ backgroundColor: theme.primary[100] }}
+                  >
+                    <Text
+                      className="text-xs"
+                      style={{ color: theme.primary[300] }}
+                    >
+                      {selectedCustomPrice
+                        ? `$${selectedCustomPrice.min} - $${selectedCustomPrice.max}`
+                        : selectedPriceRange?.label}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => handlePriceChange(undefined, undefined)}
+                      className="ml-1"
+                    >
+                      <Image
+                        source={icons.close}
+                        className="w-3 h-3"
+                        style={{ tintColor: theme.primary[300] }}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {params.query && (
+                  <View
+                    className="px-2 py-1 rounded-full flex-row items-center"
+                    style={{ backgroundColor: theme.primary[100] }}
+                  >
+                    <Text
+                      className="text-xs"
+                      style={{ color: theme.primary[300] }}
+                    >
+                      {params.query}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => router.setParams({ query: "" })}
+                      className="ml-1"
+                    >
+                      <Image
+                        source={icons.close}
+                        className="w-3 h-3"
+                        style={{ tintColor: theme.primary[300] }}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <TouchableOpacity
+                  onPress={() => {
+                    router.setParams({ filter: "", query: "" });
+                    handlePriceChange(undefined, undefined);
+                  }}
+                >
+                  <Text
+                    className="text-xs"
+                    style={{ color: theme.primary[300] }}
+                  >
+                    Clear all
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Results Count */}
-            <View className="flex-row justify-between items-center mt-5 mb-2">
+            <View className="flex-row justify-between items-center mt-2 mb-2">
               <Text
                 className="text-xl font-rubik-bold"
                 style={{ color: theme.title }}

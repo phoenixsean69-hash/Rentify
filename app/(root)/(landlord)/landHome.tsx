@@ -1,5 +1,6 @@
 // app/(root)/landHome.tsx
 import FeaturedModal from "@/components/FeaturedModal";
+
 import SearchModal from "@/components/SearchModal";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -7,6 +8,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   FlatList,
   Image,
   RefreshControl,
@@ -56,7 +58,7 @@ export default function LandLordHome() {
   const [featuredProperties, setFeaturedProperties] = useState<any[]>([]);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
 
-  const params = useLocalSearchParams<{ filter?: string }>();
+  const params = useLocalSearchParams<{ filter?: string; refresh?: string }>();
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
 
@@ -64,22 +66,63 @@ export default function LandLordHome() {
     useNotificationStore();
   const userId = user?.accountId;
 
+  const backPressCountRef = useRef(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        () => {
+          BackHandler.exitApp();
+          return true;
+        },
+      );
+
+      return () => subscription.remove();
+    }, []),
+  );
   useEffect(() => {
     if (userId) {
       loadNotifications(userId);
       fetchAppwriteUnreadCount(userId);
     }
   }, [userId]);
-  // Refresh unread count when screen is focused (coming back from notifications)
 
+  // Single useFocusEffect for all focus-related operations
   useFocusEffect(
     useCallback(() => {
+      // Refresh notification badge when screen is focused
       if (userId) {
         console.log("🔄 Refreshing notification badge...");
         loadNotifications(userId);
         fetchAppwriteUnreadCount(userId);
       }
-    }, [userId]),
+
+      // Check for refresh param from AddListing screen
+      if (params.refresh === "true" && user?.accountId) {
+        console.log("🔄 Refreshing properties after adding new listing...");
+        Promise.all([
+          refetchLatest(),
+          refetchMyProperties({
+            filter: params.filter || "",
+            query: "",
+            limit: 20,
+            creatorId: user.accountId,
+          }),
+        ])
+          .then(() => {
+            console.log("✅ Properties refreshed successfully");
+          })
+          .catch((error) => {
+            console.error("❌ Error refreshing properties:", error);
+          });
+
+        // Clear the refresh param to prevent repeated refreshes
+        setTimeout(() => {
+          router.setParams({});
+        }, 100);
+      }
+    }, [userId, params.refresh, user?.accountId, params.filter]),
   );
 
   // Update greeting every minute
@@ -126,7 +169,7 @@ export default function LandLordHome() {
     skip: false,
   });
 
-  // Refetch when filter changes - FIXED: use a ref to prevent infinite loop
+  // Refetch when filter changes
   const filterRef = useRef(params.filter);
 
   useEffect(() => {
@@ -140,21 +183,26 @@ export default function LandLordHome() {
         creatorId: user?.accountId,
       });
     }
-  }, [params.filter, refetchMyProperties, user?.accountId]);
+  }, [params.filter, user?.accountId]);
 
   // Pull to refresh
   const onRefresh = async () => {
     setRefreshing(true);
     if (user?.accountId) {
-      await Promise.all([
-        refetchLatest(),
-        refetchMyProperties({
-          filter: params.filter || "",
-          query: "",
-          limit: 20,
-          creatorId: user?.accountId,
-        }),
-      ]);
+      try {
+        await Promise.all([
+          refetchLatest(),
+          refetchMyProperties({
+            filter: params.filter || "",
+            query: "",
+            limit: 20,
+            creatorId: user?.accountId,
+          }),
+        ]);
+        console.log("✅ Manual refresh completed");
+      } catch (error) {
+        console.error("❌ Error during manual refresh:", error);
+      }
     }
     setRefreshing(false);
   };
@@ -178,7 +226,7 @@ export default function LandLordHome() {
   const fetchBestProperties = async () => {
     try {
       setLoadingFeatured(true);
-      const best = await getBestProperties(5); // Get top 5 best properties
+      const best = await getBestProperties(5);
       setFeaturedProperties(best);
     } catch (error) {
       console.error("Error fetching best properties:", error);
@@ -202,7 +250,7 @@ export default function LandLordHome() {
         <View className="relative">
           <Image
             source={getHeaderImage()}
-            className="w-full h-36 rounded-b-3xl"
+            className="w-full h-36 "
             style={{ opacity: 0.95 }}
           />
           <LinearGradient
@@ -221,7 +269,7 @@ export default function LandLordHome() {
 
         {/* User info overlay */}
         <View className="absolute inset-0 flex-row items-center justify-between px-6 pt-2">
-          <View className="flex-row items-center">
+          <View className="flex-row items-center flex-1 mr-2">
             {!loadingAvatar ? (
               <TouchableOpacity
                 onPress={() => router.push("/landProfile")}
@@ -237,19 +285,29 @@ export default function LandLordHome() {
                 <ActivityIndicator size="small" color="#ffffff" />
               </View>
             )}
-            <View className="ml-3">
-              <Text className="text-xs font-rubik text-white/90">
+            <View className="ml-3 flex-1">
+              <Text
+                className="text-xs font-rubik text-white/90"
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
                 {greeting}
               </Text>
-              <Text className="text-lg font-rubik-bold text-white">
-                {user?.name || "Landlord"}
+              <Text
+                className="text-lg font-rubik-bold text-white"
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {user?.name?.length > 20
+                  ? `${user.name.substring(0, 18)}...`
+                  : user?.name || "Landlord"}
               </Text>
             </View>
           </View>
 
           <TouchableOpacity
             onPress={() => router.push("/landLordNotifications")}
-            className="bg-white/20 p-2.5 rounded-full relative"
+            className="bg-white/20 p-2.5 rounded-full relative flex-shrink-0"
           >
             <Image
               source={icons.bell}

@@ -9,7 +9,8 @@ import {
   getAvailableProperties,
   getBestProperties,
 } from "@/lib/appwrite";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 
 import { Card, FeaturedCard } from "@/components/Cards";
@@ -20,6 +21,7 @@ import icons from "@/constants/icons";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   ActivityIndicator,
+  BackHandler,
   FlatList,
   Image,
   Text,
@@ -70,6 +72,20 @@ const Home = () => {
       fetchAppwriteUnreadCount(userId);
     }
   }, [userId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        () => {
+          BackHandler.exitApp();
+          return true;
+        },
+      );
+
+      return () => subscription.remove();
+    }, []),
+  );
 
   // Run cleanup on mount
   useEffect(() => {
@@ -180,6 +196,31 @@ const Home = () => {
 
   const handleCardPress = (id: string) => router.push(`/properties/${id}`);
 
+  // In your home screen component (where the bell icon is), add this:
+
+  useFocusEffect(
+    useCallback(() => {
+      // Refresh unread count when screen comes into focus
+      const refreshUnreadCount = async () => {
+        if (userId) {
+          await fetchAppwriteUnreadCount(userId);
+          await loadNotifications(userId);
+        }
+      };
+
+      refreshUnreadCount();
+    }, [userId, fetchAppwriteUnreadCount, loadNotifications]),
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (userId) {
+        loadNotifications(userId);
+      }
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [userId, loadNotifications]);
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
 
@@ -190,7 +231,7 @@ const Home = () => {
         <View className="relative">
           <Image
             source={getHeaderImage()}
-            className="w-full h-36 rounded-b-3xl"
+            className="w-full h-36 "
             style={{ opacity: 0.95 }}
           />
           <LinearGradient

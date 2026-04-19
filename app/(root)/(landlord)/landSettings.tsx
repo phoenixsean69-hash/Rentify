@@ -1,12 +1,10 @@
 // app/(root)/settings.tsx
 import { Colors } from "@/constants/Colors";
 import icons from "@/constants/icons";
-import { logout } from "@/lib/appwrite";
 import useAuthStore from "@/store/auth.store";
 import { useNotificationStore } from "@/store/notification.store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import * as Updates from "expo-updates";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -87,26 +85,6 @@ export default function SettingsScreen() {
     await saveSetting("email_notifications", value);
   };
 
-  const handleDarkModeToggle = async (value: boolean) => {
-    setDarkMode(value);
-    await saveSetting("dark_mode", value);
-    // Note: Actual theme switching would require app-wide state management
-    Alert.alert("Theme", value ? "Dark mode enabled" : "Light mode enabled", [
-      { text: "Restart app to apply changes" },
-    ]);
-  };
-
-  const handleBiometricToggle = async (value: boolean) => {
-    setBiometricEnabled(value);
-    await saveSetting("biometric_enabled", value);
-    if (value) {
-      Alert.alert(
-        "Biometric Authentication",
-        "You can now use fingerprint/face ID to unlock the app",
-      );
-    }
-  };
-
   const handleClearAllData = async () => {
     Alert.alert(
       "Clear All Data",
@@ -155,53 +133,17 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleLogout = async () => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Logout",
-        style: "destructive",
-        onPress: async () => {
-          setLoading(true);
-          try {
-            await logout();
-            router.replace("/(auth)/sign-in");
-          } catch (error) {
-            console.error("Logout error:", error);
-            Alert.alert("Error", "Failed to logout. Please try again.");
-          } finally {
-            setLoading(false);
-          }
-        },
-      },
-    ]);
-  };
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
 
-  const handleCheckForUpdates = async () => {
-    try {
-      const update = await Updates.checkForUpdateAsync();
-      if (update.isAvailable) {
-        Alert.alert(
-          "Update Available",
-          "A new version of the app is available. Would you like to update now?",
-          [
-            { text: "Later", style: "cancel" },
-            {
-              text: "Update",
-              onPress: async () => {
-                await Updates.fetchUpdateAsync();
-                await Updates.reloadAsync();
-              },
-            },
-          ],
-        );
-      } else {
-        Alert.alert("No Updates", "You're running the latest version");
-      }
-    } catch (error) {
-      console.error("Error checking for updates:", error);
-      Alert.alert("Error", "Failed to check for updates");
-    }
+  const handleCheckForUpdates = () => {
+    setCheckingUpdates(true);
+
+    setTimeout(() => {
+      setCheckingUpdates(false);
+      Alert.alert("Nookly", "You're running the latest version of Nookly!", [
+        { text: "OK" },
+      ]);
+    }, 1500);
   };
 
   const handleExportData = async () => {
@@ -263,9 +205,9 @@ export default function SettingsScreen() {
         },
         {
           icon: icons.mail,
-          title: "Email Address",
+          title: "Edit my info.",
           subtitle: user?.email || "Not set",
-          onPress: () => router.push("/change-email"),
+          onPress: () => router.push("/myDetailsEdit"),
         },
       ] as SettingItem[],
     },
@@ -302,55 +244,19 @@ export default function SettingsScreen() {
           icon: icons.eye,
           title: "View All Notifications",
           subtitle: `${unreadCount} unread`,
-          onPress: () => router.push("/notifications"),
+          onPress: () => router.push("/landNotifications"),
         },
       ] as SettingItem[],
     },
-    {
-      title: "Appearance",
-      items: [
-        {
-          icon: icons.sun,
-          title: "Dark Mode",
-          subtitle: "Toggle dark/light theme",
-          onPress: () => {},
-          rightElement: (
-            <Switch
-              value={darkMode}
-              onValueChange={handleDarkModeToggle}
-              trackColor={{ false: "#767577", true: theme.primary[300] }}
-            />
-          ),
-        },
-      ] as SettingItem[],
-    },
+
     {
       title: "Privacy & Security",
       items: [
         {
-          icon: icons.lock,
-          title: "Biometric Authentication",
-          subtitle: "Use fingerprint/face ID",
-          onPress: () => {},
-          rightElement: (
-            <Switch
-              value={biometricEnabled}
-              onValueChange={handleBiometricToggle}
-              trackColor={{ false: "#767577", true: theme.primary[300] }}
-            />
-          ),
-        },
-        {
           icon: icons.eye,
           title: "Privacy Policy",
           subtitle: "Read our privacy policy",
-          onPress: () => router.push("/about"),
-        },
-        {
-          icon: icons.document,
-          title: "Terms of Service",
-          subtitle: "Read our terms",
-          onPress: () => router.push("/about"),
+          onPress: () => router.push("/landAbout"),
         },
       ] as SettingItem[],
     },
@@ -385,13 +291,13 @@ export default function SettingsScreen() {
           icon: icons.chat,
           title: "Help & Support",
           subtitle: "Get help with the app",
-          onPress: () => router.push("/help"),
+          onPress: () => router.push("/landHelp"),
         },
         {
           icon: icons.info,
           title: "About",
           subtitle: "App information and credits",
-          onPress: () => router.push("/about"),
+          onPress: () => router.push("/landAbout"),
         },
         {
           icon: icons.star,
@@ -586,15 +492,7 @@ export default function SettingsScreen() {
           </View>
         ))}
 
-        {/* Logout Button */}
         <View className="px-5 mt-4 mb-8">
-          <TouchableOpacity
-            onPress={handleLogout}
-            className="py-4 rounded-2xl items-center"
-            style={{ backgroundColor: theme.danger + "15" }}
-          >
-            <Text className="text-red-500 font-rubik-bold text-lg">Logout</Text>
-          </TouchableOpacity>
           <Text
             className="text-center text-xs mt-4"
             style={{ color: theme.muted }}

@@ -27,295 +27,294 @@ interface HotDeal {
   sort?: string;
 }
 
-// Enhanced cache with longer TTL
+// Module-level cache (persists across component instances)
 let cachedDeals: HotDeal[] | null = null;
 let lastFetchTime = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes (increased from 30 seconds)
-
-// Flag to track if initial fetch has been done
-let initialFetchDone = false;
-let pendingPromise: Promise<HotDeal[]> | null = null;
+let isFetching = false; // Module-level fetch lock
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const HotDeals = () => {
-  const [deals, setDeals] = useState<HotDeal[]>([]);
-  const [loading, setLoading] = useState(!initialFetchDone);
+  const [deals, setDeals] = useState<HotDeal[]>(cachedDeals || []);
+  const [loading, setLoading] = useState(!cachedDeals);
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
   const isDark = colorScheme === "dark";
   const isMounted = useRef(true);
-  const fetchInProgress = useRef(false);
 
   useEffect(() => {
-    // Only fetch if we don't have cached data or if it's expired
-    const now = Date.now();
-    const hasValidCache = cachedDeals && now - lastFetchTime < CACHE_TTL;
-
-    if (hasValidCache) {
-      // Use cached data immediately
-      setDeals(cachedDeals || []);
+    // Set initial deals from cache immediately
+    if (cachedDeals) {
+      setDeals(cachedDeals);
       setLoading(false);
-    } else {
-      // Fetch fresh data
+    }
+
+    // Only fetch if cache is expired or doesn't exist
+    const now = Date.now();
+    const cacheExpired = !cachedDeals || now - lastFetchTime >= CACHE_TTL;
+
+    if (cacheExpired && !isFetching) {
       fetchHotDeals();
     }
 
     return () => {
       isMounted.current = false;
     };
-  }, []); // Empty dependency array - only runs on mount
+  }, []); // Empty dependency array - runs once
 
-  const fetchHotDeals = async (): Promise<HotDeal[]> => {
+  const fetchHotDeals = async () => {
     // Prevent multiple simultaneous fetches
-    if (pendingPromise) {
-      const result = await pendingPromise;
+    if (isFetching) return;
+
+    isFetching = true;
+
+    // Double-check cache again (in case it was populated while waiting)
+    const now = Date.now();
+    if (cachedDeals && now - lastFetchTime < CACHE_TTL) {
+      console.log(
+        "📦 Hot deals cache populated during wait, using cached data",
+      );
       if (isMounted.current) {
-        setDeals(result);
+        setDeals(cachedDeals);
         setLoading(false);
       }
-      return result;
+      isFetching = false;
+      return;
     }
 
-    fetchInProgress.current = true;
+    console.log("🌐 Fetching fresh hot deals");
 
-    pendingPromise = (async () => {
-      try {
-        const now = Date.now();
+    try {
+      if (isMounted.current) {
+        setLoading(true);
+      }
 
-        // Double-check cache before fetching (in case multiple calls)
-        if (cachedDeals && now - lastFetchTime < CACHE_TTL) {
-          console.log("📦 Using cached hot deals");
-          return cachedDeals;
-        }
+      const realDeals: HotDeal[] = [];
 
-        console.log("🌐 Fetching fresh hot deals");
+      // Calculate date 15 days ago
+      const fifteenDaysAgo = new Date();
+      fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
 
-        const realDeals: HotDeal[] = [];
+      // Use Promise.all for parallel requests to improve performance
+      const [
+        newListingsResult,
+        availableResult,
+        boardingResult,
+        trendingResult,
+        allPropertiesResult,
+        openPropertiesResult,
+      ] = await Promise.allSettled([
+        // 1. New Listings (last 15 days)
+        databases.listDocuments(
+          config.databaseId!,
+          config.propertiesCollectionId!,
+          [
+            Query.greaterThan("$createdAt", fifteenDaysAgo.toISOString()),
+            Query.limit(100),
+          ],
+        ),
+        // 2. Available Now
+        databases.listDocuments(
+          config.databaseId!,
+          config.propertiesCollectionId!,
+          [
+            Query.equal("isAvailable", true),
+            Query.greaterThan("$createdAt", fifteenDaysAgo.toISOString()),
+            Query.limit(100),
+          ],
+        ),
+        // 3. Boarding Houses
+        databases.listDocuments(
+          config.databaseId!,
+          config.propertiesCollectionId!,
+          [
+            Query.equal("type", "Boarding"),
+            Query.equal("isAvailable", true),
+            Query.limit(100),
+          ],
+        ),
+        // 4. Trending properties
+        databases.listDocuments(
+          config.databaseId!,
+          config.propertiesCollectionId!,
+          [Query.orderDesc("likes"), Query.limit(3)],
+        ),
+        // 5. All available properties (for price drops)
+        databases.listDocuments(
+          config.databaseId!,
+          config.propertiesCollectionId!,
+          [Query.equal("isAvailable", true), Query.limit(100)],
+        ),
+        // 6. Open properties
+        databases.listDocuments(
+          config.databaseId!,
+          config.propertiesCollectionId!,
+          [Query.equal("isAvailable", true), Query.limit(100)],
+        ),
+      ]);
 
-        // Calculate date 15 days ago
-        const fifteenDaysAgo = new Date();
-        fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-
-        // Use Promise.all for parallel requests to improve performance
-        const [
-          newListingsResult,
-          availableResult,
-          boardingResult,
-          trendingResult,
-          allPropertiesResult,
-          openPropertiesResult,
-        ] = await Promise.allSettled([
-          // 1. New Listings (last 15 days)
-          databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [
-              Query.greaterThan("$createdAt", fifteenDaysAgo.toISOString()),
-              Query.limit(100),
-            ],
-          ),
-          // 2. Available Now
-          databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [
-              Query.equal("isAvailable", true),
-              Query.greaterThan("$createdAt", fifteenDaysAgo.toISOString()),
-              Query.limit(100),
-            ],
-          ),
-          // 3. Boarding Houses
-          databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [
-              Query.equal("type", "Boarding"),
-              Query.equal("isAvailable", true),
-              Query.limit(100),
-            ],
-          ),
-          // 4. Trending properties
-          databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [Query.orderDesc("likes"), Query.limit(3)],
-          ),
-          // 5. All available properties (for price drops)
-          databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [Query.equal("isAvailable", true), Query.limit(100)],
-          ),
-          // 6. Open properties
-          databases.listDocuments(
-            config.databaseId!,
-            config.propertiesCollectionId!,
-            [Query.equal("isAvailable", true), Query.limit(100)],
-          ),
-        ]);
-
-        // Process New Listings
-        if (newListingsResult.status === "fulfilled") {
-          const newListingsCount = newListingsResult.value.total;
-          if (newListingsCount > 0) {
-            realDeals.push({
-              title: "New Listings",
-              description: `${newListingsCount} propert${newListingsCount > 1 ? "ies" : "y"} added this month`,
-              icon: icons.plus,
-              color: "#10B981",
-              bgColor: "#ECFDF5",
-              count: newListingsCount,
-              type: "new_listing",
-              sort: "newest",
-              route: "/filtered-properties",
-            });
-          }
-        }
-
-        // Process Available Now
-        if (availableResult.status === "fulfilled") {
-          const availableCount = availableResult.value.total;
-          if (availableCount > 0) {
-            realDeals.push({
-              title: "Available Now",
-              description: `${availableCount} new propert${availableCount > 1 ? "ies" : "y"} added recently`,
-              icon: icons.house,
-              color: "#10B981",
-              bgColor: "#D1FAE5",
-              count: availableCount,
-              type: "available",
-              filter: "available",
-              route: "/filtered-properties",
-            });
-          }
-        }
-
-        // Process Student Deals
-        if (boardingResult.status === "fulfilled") {
-          const boardingCount = boardingResult.value.total;
-          if (boardingCount > 0) {
-            realDeals.push({
-              title: "Student Deals 🎓",
-              description: `${boardingCount} boarding house${boardingCount > 1 ? "s" : ""} for students`,
-              icon: icons.student || icons.house,
-              color: "#8B5CF6",
-              bgColor: "#EDE9FE",
-              count: boardingCount,
-              type: "boarding",
-              filter: "boarding",
-              route: "/filtered-properties",
-            });
-          }
-        }
-
-        // Process Trending
-        if (trendingResult.status === "fulfilled") {
-          const actualTrending = trendingResult.value.documents.filter(
-            (p) => (p.likes || 0) > 0,
-          );
-          if (actualTrending.length > 0) {
-            realDeals.push({
-              title: "Trending 🔥",
-              description: `${actualTrending.length} most liked propert${actualTrending.length > 1 ? "ies" : "y"}`,
-              icon: icons.like,
-              color: "#F59E0B",
-              bgColor: "#FEF3C7",
-              count: actualTrending.length,
-              type: "trending",
-              sort: "trending",
-              route: "/trending-properties",
-            });
-          }
-        }
-
-        // Process Price Drops
-        if (allPropertiesResult.status === "fulfilled") {
-          const allProperties = allPropertiesResult.value.documents;
-          let priceDropCount = allProperties.filter(
-            (p) => p.hasPriceDrop === true,
-          ).length;
-
-          if (priceDropCount === 0) {
-            const priceReducedProperties = allProperties.filter((p) => {
-              if (
-                p.priceHistory &&
-                Array.isArray(p.priceHistory) &&
-                p.priceHistory.length > 1
-              ) {
-                const previousPrice =
-                  p.priceHistory[p.priceHistory.length - 2]?.price ||
-                  p.originalPrice;
-                const currentPrice = p.price;
-                return currentPrice < previousPrice;
-              }
-              return false;
-            });
-            priceDropCount = priceReducedProperties.length;
-          }
-
-          if (priceDropCount > 0) {
-            realDeals.push({
-              title: "Price Drop!",
-              description: `${priceDropCount} property${priceDropCount > 1 ? "s" : ""} reduced`,
-              icon: icons.downTrend,
-              color: "#EF4444",
-              bgColor: "#FEF2F2",
-              count: priceDropCount,
-              type: "price_drop",
-              filter: "price_drop",
-              route: "/filtered-properties",
-            });
-          }
-        }
-
-        // Process Open Properties
-        if (openPropertiesResult.status === "fulfilled") {
-          const openPropertiesCount = openPropertiesResult.value.total;
+      // Process New Listings
+      if (newListingsResult.status === "fulfilled") {
+        const newListingsCount = newListingsResult.value.total;
+        if (newListingsCount > 0) {
           realDeals.push({
-            title: "Open Properties",
-            description:
-              openPropertiesCount > 0
-                ? `${openPropertiesCount} propert${openPropertiesCount > 1 ? "ies" : ""} available now`
-                : "No properties available at the moment",
+            title: "New Listings",
+            description: `${newListingsCount} propert${newListingsCount > 1 ? "ies" : "y"} added this month`,
+            icon: icons.plus,
+            color: "#10B981",
+            bgColor: "#ECFDF5",
+            count: newListingsCount,
+            type: "new_listing",
+            sort: "newest",
+            route: "/filtered-properties",
+          });
+        }
+      }
+
+      // Process Available Now
+      if (availableResult.status === "fulfilled") {
+        const availableCount = availableResult.value.total;
+        if (availableCount > 0) {
+          realDeals.push({
+            title: "Available Now",
+            description: `${availableCount} new propert${availableCount > 1 ? "ies" : "y"} added recently`,
             icon: icons.house,
-            color: "#3B82F6",
-            bgColor: "#EFF6FF",
-            count: openPropertiesCount,
-            type: "open_properties",
+            color: "#10B981",
+            bgColor: "#D1FAE5",
+            count: availableCount,
+            type: "available",
             filter: "available",
             route: "/filtered-properties",
           });
         }
+      }
 
-        // Sort deals by priority
-        const priorityOrder = [
-          "new_listing",
-          "available",
-          "boarding",
-          "trending",
-          "price_drop",
-          "open_properties",
-        ];
+      // Process Student Deals
+      if (boardingResult.status === "fulfilled") {
+        const boardingCount = boardingResult.value.total;
+        if (boardingCount > 0) {
+          realDeals.push({
+            title: "Student Deals",
+            description: `${boardingCount} boarding house${boardingCount > 1 ? "s" : ""} for students`,
+            icon: icons.student || icons.house,
+            color: "#8B5CF6",
+            bgColor: "#EDE9FE",
+            count: boardingCount,
+            type: "boarding",
+            filter: "boarding",
+            route: "/filtered-properties",
+          });
+        }
+      }
 
-        const sortedDeals = [...realDeals].sort((a, b) => {
-          return priorityOrder.indexOf(a.type) - priorityOrder.indexOf(b.type);
+      // Process Trending
+      if (trendingResult.status === "fulfilled") {
+        const actualTrending = trendingResult.value.documents.filter(
+          (p) => (p.likes || 0) > 0,
+        );
+        if (actualTrending.length > 0) {
+          realDeals.push({
+            title: "Trending",
+            description: `${actualTrending.length} most liked propert${actualTrending.length > 1 ? "ies" : "y"}`,
+            icon: icons.like,
+            color: "#F59E0B",
+            bgColor: "#FEF3C7",
+            count: actualTrending.length,
+            type: "trending",
+            sort: "trending",
+            route: "/trending-properties",
+          });
+        }
+      }
+
+      // Process Price Drops
+      if (allPropertiesResult.status === "fulfilled") {
+        const allProperties = allPropertiesResult.value.documents;
+        let priceDropCount = allProperties.filter(
+          (p) => p.hasPriceDrop === true,
+        ).length;
+
+        if (priceDropCount === 0) {
+          const priceReducedProperties = allProperties.filter((p) => {
+            if (
+              p.priceHistory &&
+              Array.isArray(p.priceHistory) &&
+              p.priceHistory.length > 1
+            ) {
+              const previousPrice =
+                p.priceHistory[p.priceHistory.length - 2]?.price ||
+                p.originalPrice;
+              const currentPrice = p.price;
+              return currentPrice < previousPrice;
+            }
+            return false;
+          });
+          priceDropCount = priceReducedProperties.length;
+        }
+
+        if (priceDropCount > 0) {
+          realDeals.push({
+            title: "Price Drop!",
+            description: `${priceDropCount} property${priceDropCount > 1 ? "s" : ""} reduced`,
+            icon: icons.downTrend,
+            color: "#EF4444",
+            bgColor: "#FEF2F2",
+            count: priceDropCount,
+            type: "price_drop",
+            filter: "price_drop",
+            route: "/filtered-properties",
+          });
+        }
+      }
+
+      // Process Open Properties
+      if (openPropertiesResult.status === "fulfilled") {
+        const openPropertiesCount = openPropertiesResult.value.total;
+        realDeals.push({
+          title: "Open Properties",
+          description:
+            openPropertiesCount > 0
+              ? `${openPropertiesCount} propert${openPropertiesCount > 1 ? "ies" : ""} available now`
+              : "No properties available at the moment",
+          icon: icons.house,
+          color: "#3B82F6",
+          bgColor: "#EFF6FF",
+          count: openPropertiesCount,
+          type: "open_properties",
+          filter: "available",
+          route: "/filtered-properties",
         });
+      }
 
-        const finalDeals = sortedDeals.slice(0, 3);
+      // Sort deals by priority
+      const priorityOrder = [
+        "new_listing",
+        "available",
+        "boarding",
+        "trending",
+        "price_drop",
+        "open_properties",
+      ];
 
-        // Update cache
+      const sortedDeals = [...realDeals].sort((a, b) => {
+        return priorityOrder.indexOf(a.type) - priorityOrder.indexOf(b.type);
+      });
+
+      const finalDeals = sortedDeals.slice(0, 3);
+
+      if (isMounted.current) {
+        setDeals(finalDeals);
+        // Update module-level cache
         cachedDeals = finalDeals;
         lastFetchTime = Date.now();
-        initialFetchDone = true;
-
-        return finalDeals;
-      } catch (error) {
-        console.error("Error fetching hot deals:", error);
-        // Return cached data if available
-        if (cachedDeals) {
-          return cachedDeals;
-        }
+      }
+    } catch (error) {
+      console.error("Error fetching hot deals:", error);
+      if (isMounted.current && cachedDeals) {
+        // Use cached data if available
+        setDeals(cachedDeals);
+      } else if (isMounted.current) {
         // Return fallback deals
-        return [
+        setDeals([
           {
             title: "New Listings",
             description: "Check out fresh properties",
@@ -346,19 +345,14 @@ const HotDeals = () => {
             type: "open_properties",
             route: "/filtered-properties",
           },
-        ];
-      } finally {
-        fetchInProgress.current = false;
-        pendingPromise = null;
+        ]);
       }
-    })();
-
-    const result = await pendingPromise;
-    if (isMounted.current) {
-      setDeals(result);
-      setLoading(false);
+    } finally {
+      if (isMounted.current) {
+        setLoading(false);
+      }
+      isFetching = false;
     }
-    return result;
   };
 
   const handleDealPress = (deal: HotDeal) => {
@@ -414,7 +408,7 @@ const HotDeals = () => {
               className="text-2xl font-rubik-bold"
               style={{ color: theme.text }}
             >
-              Hot Deals 🔥
+              Hot Deals
             </Text>
             <Text className="text-sm text-gray-500 font-rubik">
               Loading deals...
@@ -451,7 +445,7 @@ const HotDeals = () => {
             className="text-2xl font-rubik-bold"
             style={{ color: theme.text }}
           >
-            Hot Deals 🔥
+            Hot Deals
           </Text>
           <Text className="text-sm text-gray-500 font-rubik">
             Don&apos;t miss out on these

@@ -40,6 +40,7 @@ export const FeaturedCard = ({ item, onPress }: Props) => {
   const title = item.propertyName || item.name || "Property";
   const likes = item.likes ?? 0;
   const views = item.views ?? 0;
+  const propertyType = item.type || "Property";
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
 
@@ -55,7 +56,7 @@ export const FeaturedCard = ({ item, onPress }: Props) => {
         colors={["transparent", "rgba(0,0,0,0.3)", "rgba(0,0,0,0.6)"]}
         start={{ x: 0, y: 1 }}
         end={{ x: 0, y: 1 }}
-        className="absolute bottom-0 left-0 right-0 h-32 rounded-b-2xl"
+        className="absolute bottom-0 left-0 right-0 h-40 rounded-b-2xl"
       />
 
       {/* Rating badge */}
@@ -67,9 +68,9 @@ export const FeaturedCard = ({ item, onPress }: Props) => {
       </View>
 
       {/* Views badge - top left */}
-      {likes > 0 && (
+      {views > 0 && (
         <View className="flex flex-row items-center bg-black/50 px-2 py-1 rounded-full absolute top-5 left-5 z-10">
-          <Image source={icons.eye} className="size-5" tintColor="#fff" />
+          <Image source={icons.eye} className="size-3.5" tintColor="#fff" />
           <Text className="text-xs font-rubik-bold text-white ml-1">
             {views}
           </Text>
@@ -78,6 +79,15 @@ export const FeaturedCard = ({ item, onPress }: Props) => {
 
       {/* Property details at bottom */}
       <View className="absolute bottom-5 inset-x-5 z-10">
+        {/* Type badge at bottom */}
+        <View className="flex-row items-center mb-2">
+          <View className="bg-primary-300/90 px-2 py-0.5 rounded-full">
+            <Text className="text-xs font-rubik-medium text-white">
+              {propertyType}
+            </Text>
+          </View>
+        </View>
+
         <Text
           className="text-xl font-rubik-extrabold text-white"
           numberOfLines={1}
@@ -89,8 +99,15 @@ export const FeaturedCard = ({ item, onPress }: Props) => {
         </Text>
 
         <View className="flex flex-row items-center justify-between mt-2">
-          <Text className="text-xl font-rubik-extrabold text-white">
+          <Text className="text-base font-rubik-bold text-white">
             ${item.price ?? 0}
+            <Text className="text-lg font-rubik text-white">
+              {propertyType === "Boarding"
+                ? "/head"
+                : propertyType === "Luxury"
+                  ? "/night"
+                  : "/month"}
+            </Text>
           </Text>
           <View className="flex flex-row items-center gap-1">
             <Image
@@ -116,6 +133,7 @@ export const Card = ({ item, onPress }: Props) => {
   const rating = item.rating ?? 0;
   const likes = item.likes ?? 0;
   const views = item.views ?? 0;
+  const propertyType = item.type || "Property";
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
 
@@ -125,14 +143,41 @@ export const Card = ({ item, onPress }: Props) => {
       style={{ backgroundColor: theme.background }}
       onPress={onPress}
     >
-      <View className="flex flex-row items-center absolute px-2 top-5 right-5 bg-white/90 p-1 rounded-full z-50">
-        <Image source={icons.star} className="size-2.5" />
-        <Text className="text-xs font-rubik-bold text-primary-300 ml-0.5">
-          {rating.toFixed()}
-        </Text>
-      </View>
+      {/* Image Container with Badges Overlay */}
+      <View className="relative">
+        <Image source={{ uri: imageUri }} className="w-full h-40 rounded-lg" />
 
-      <Image source={{ uri: imageUri }} className="w-full h-40 rounded-lg" />
+        {/* Views Badge - Top Left */}
+        {views > 0 && (
+          <View className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded-full flex-row items-center">
+            <Image
+              source={icons.eye}
+              className="w-3 h-3 mr-1"
+              style={{ tintColor: "#fff" }}
+            />
+            <Text className="text-xs font-rubik-medium text-white">
+              {views}
+            </Text>
+          </View>
+        )}
+
+        {/* Rating Badge - Top Right */}
+        <View className="absolute top-2 right-2 bg-white/90 px-2 py-1 rounded-full flex-row items-center">
+          <Image source={icons.star} className="w-3 h-3" />
+          <Text className="text-xs font-rubik-bold text-primary-300 ml-0.5">
+            {rating.toFixed()}
+          </Text>
+        </View>
+
+        {/* Property Type Badge - Bottom Center */}
+        <View className="absolute bottom-0 left-0 right-0 items-center pb-2">
+          <View className="bg-black/60 px-3 py-1.5 rounded-full">
+            <Text className="text-xs font-rubik-medium text-white">
+              {propertyType}
+            </Text>
+          </View>
+        </View>
+      </View>
 
       <View className="flex flex-col mt-2">
         {/* Title */}
@@ -153,52 +198,36 @@ export const Card = ({ item, onPress }: Props) => {
           {item.address || "Unknown address"}
         </Text>
 
-        {/* Price and Stats Row */}
+        {/* Price and Likes Row */}
         <View className="flex flex-row items-center justify-between">
           {/* Price */}
           <Text className="text-base font-rubik-bold text-primary-300">
             ${item.price ?? 0}
             <Text className="text-xs font-rubik" style={{ color: theme.muted }}>
-              /mo
+              {propertyType === "Boarding"
+                ? "/head"
+                : propertyType === "Luxury"
+                  ? "/night"
+                  : "/month"}
             </Text>
           </Text>
 
-          {/* Stats Row */}
-          <View className="flex flex-row items-center gap-3">
-            {/* Views */}
-            {views > 0 && (
-              <View className="flex flex-row items-center gap-1">
-                <Image
-                  source={icons.eye}
-                  className="w-3.5 h-3.5"
-                  style={{ tintColor: theme.muted }}
-                />
-                <Text
-                  className="text-xs font-rubik-medium"
-                  style={{ color: theme.muted }}
-                >
-                  {views}
-                </Text>
-              </View>
-            )}
-
-            {/* Likes */}
-            {likes > 0 && (
-              <View className="flex flex-row items-center gap-1">
-                <Image
-                  source={icons.heart}
-                  className="w-3.5 h-3.5"
-                  style={{ tintColor: "#FF69B4" }}
-                />
-                <Text
-                  className="text-xs font-rubik-medium"
-                  style={{ color: theme.muted }}
-                >
-                  {likes}
-                </Text>
-              </View>
-            )}
-          </View>
+          {/* Likes */}
+          {likes > 0 && (
+            <View className="flex flex-row items-center gap-1">
+              <Image
+                source={icons.heart}
+                className="w-3.5 h-3.5"
+                style={{ tintColor: "#FF69B4" }}
+              />
+              <Text
+                className="text-xs font-rubik-medium"
+                style={{ color: theme.muted }}
+              >
+                {likes}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>

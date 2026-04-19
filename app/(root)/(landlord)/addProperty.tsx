@@ -63,6 +63,11 @@ const AddPropertyScreen = () => {
   const [images, setImages] = useState<ImagePickerAsset[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Modals for success and error messages
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
   // Check if user is loaded
   useEffect(() => {
     if (user) {
@@ -126,8 +131,7 @@ const AddPropertyScreen = () => {
       !price ||
       !area ||
       !bedrooms ||
-      !bathrooms ||
-      selectedFacilities.length === 0
+      !bathrooms
     ) {
       Alert.alert("Error", "Please fill all required fields");
       return false;
@@ -183,12 +187,14 @@ const AddPropertyScreen = () => {
     }
 
     if (!user) {
-      Alert.alert("Error", "You must be logged in to add a listing");
+      setErrorMessage("You must be logged in to add a listing");
+      setErrorModalVisible(true);
       return;
     }
 
     if (!user.accountId) {
-      Alert.alert("Error", "User account ID not found");
+      setErrorMessage("User account ID not found");
+      setErrorModalVisible(true);
       return;
     }
 
@@ -204,7 +210,8 @@ const AddPropertyScreen = () => {
           uploadedImageUrls.push(imageUrl);
         } catch (error) {
           console.error(`Failed to upload image ${i + 1}:`, error);
-          Alert.alert("Upload Error", `Failed to upload image ${i + 1}`);
+          setErrorMessage(`Failed to upload image ${i + 1}`);
+          setErrorModalVisible(true);
           setLoading(false);
           return;
         }
@@ -237,20 +244,45 @@ const AddPropertyScreen = () => {
       if (uploadedImageUrls[2]) listingData.image3 = uploadedImageUrls[2];
 
       console.log("Full listing data:", listingData);
+
+      // Add the listing
       await AddListing(listingData);
 
-      Alert.alert("Success", "Listing added successfully!", [
-        { text: "OK", onPress: () => router.replace("/landHome") },
-      ]);
+      // Show success modal instead of alert
+      setSuccessModalVisible(true);
     } catch (error) {
       console.error("Error saving listing:", error);
-      Alert.alert("Error", "Failed to save listing. Please try again.");
+      setErrorMessage(
+        "Failed to save listing. Please check your connection and try again.",
+      );
+      setErrorModalVisible(true);
     } finally {
       setLoading(false);
     }
   };
 
+  // Add a reset form function
+  const resetForm = () => {
+    setPropertyName("");
+    setType("");
+    setDescription("");
+    setHouseNumber("");
+    setStreetName("");
+    setNeighbourhood("");
+    setCityTown("");
+    setPrice("");
+    setArea("");
+    setBedrooms("");
+    setBathrooms("");
+    setRoomFor("");
+    setCurfew("");
+    setCurfewAmPm("");
+    setSelectedFacilities([]);
+    setImages([]);
+  };
+
   // Property Type Modal
+  // Property Type Modal with Icons
   const renderTypeModal = () => (
     <Modal
       animationType="slide"
@@ -287,7 +319,7 @@ const AddPropertyScreen = () => {
                   setType(item.category);
                   setTypeModalVisible(false);
                 }}
-                className={`p-4 mb-2 rounded-xl border ${
+                className={`p-4 mb-2 rounded-xl border flex-row items-center ${
                   type === item.category
                     ? "bg-primary-100 border-primary-300"
                     : "bg-white border-gray-200"
@@ -301,8 +333,37 @@ const AddPropertyScreen = () => {
                     type === item.category ? theme.primary[300] : theme.title,
                 }}
               >
+                {/* Icon based on property type */}
+                <Image
+                  source={
+                    item.category === "Apartment"
+                      ? icons.apartment
+                      : item.category === "House"
+                        ? icons.house
+                        : item.category === "Luxury"
+                          ? icons.luxury
+                          : item.category === "Boarding"
+                            ? icons.boarding
+                            : item.category === "Studio"
+                              ? icons.studio
+                              : item.category === "Land"
+                                ? icons.land
+                                : item.category === "Other"
+                                  ? icons.other
+                                  : item.category === "Workplace"
+                                    ? icons.workplace
+                                    : item.category === "Duplex"
+                                      ? icons.duplex
+                                      : icons.other
+                  }
+                  className="w-6 h-6 mr-3"
+                  style={{
+                    tintColor:
+                      type === item.category ? theme.primary[300] : theme.muted,
+                  }}
+                />
                 <Text
-                  className={`text-lg font-rubik-medium ${
+                  className={`text-lg font-rubik-medium flex-1 ${
                     type === item.category
                       ? "text-primary-300"
                       : "text-black-300"
@@ -314,6 +375,14 @@ const AddPropertyScreen = () => {
                 >
                   {item.title}
                 </Text>
+                {type === item.category && (
+                  <Text
+                    className="text-primary-300 font-rubik-bold"
+                    style={{ color: theme.primary[300] }}
+                  >
+                    ✓
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
           />
@@ -321,7 +390,6 @@ const AddPropertyScreen = () => {
       </View>
     </Modal>
   );
-
   // Curfew Modal
   const renderCurfewModal = () => (
     <Modal
@@ -562,6 +630,125 @@ const AddPropertyScreen = () => {
       </SafeAreaView>
     );
   }
+
+  const renderSuccessModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={successModalVisible}
+      onRequestClose={() => setSuccessModalVisible(false)}
+    >
+      <View className="flex-1 justify-center items-center bg-black/50">
+        <View
+          className="rounded-3xl p-6 w-[85%] items-center"
+          style={{ backgroundColor: theme.navBackground }}
+        >
+          {/* Success Icon */}
+          <View
+            className="w-20 h-20 rounded-full items-center justify-center mb-4"
+            style={{ backgroundColor: theme.primary[300] + "20" }}
+          >
+            <Text className="text-5xl">✓</Text>
+          </View>
+
+          <Text
+            className="text-2xl font-rubik-bold mb-2 text-center"
+            style={{ color: theme.text }}
+          >
+            Success!
+          </Text>
+
+          <Text
+            className="text-base font-rubik mb-6 text-center"
+            style={{ color: theme.muted }}
+          >
+            Your property has been listed successfully
+          </Text>
+
+          {/* Buttons */}
+          <TouchableOpacity
+            onPress={() => {
+              setSuccessModalVisible(false);
+              resetForm();
+            }}
+            className="w-full py-4 rounded-xl mb-3"
+            style={{ backgroundColor: theme.surface }}
+          >
+            <Text
+              className="text-center font-rubik-bold text-base"
+              style={{ color: theme.text }}
+            >
+              Stay Here
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              setSuccessModalVisible(false);
+              router.replace({
+                pathname: "/landHome",
+                params: { refresh: "true" },
+              });
+            }}
+            className="w-full py-4 rounded-xl"
+            style={{ backgroundColor: theme.primary[300] }}
+          >
+            <Text className="text-center font-rubik-bold text-base text-white">
+              Go Home
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderErrorModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={errorModalVisible}
+      onRequestClose={() => setErrorModalVisible(false)}
+    >
+      <View className="flex-1 justify-center items-center bg-black/50">
+        <View
+          className="rounded-3xl p-6 w-[85%] items-center"
+          style={{ backgroundColor: theme.navBackground }}
+        >
+          {/* Error Icon */}
+          <View
+            className="w-20 h-20 rounded-full items-center justify-center mb-4"
+            style={{ backgroundColor: theme.danger + "20" }}
+          >
+            <Text className="text-5xl">✕</Text>
+          </View>
+
+          <Text
+            className="text-2xl font-rubik-bold mb-2 text-center"
+            style={{ color: theme.text }}
+          >
+            Error!
+          </Text>
+
+          <Text
+            className="text-base font-rubik mb-6 text-center"
+            style={{ color: theme.muted }}
+          >
+            {errorMessage || "Failed to save listing. Please try again."}
+          </Text>
+
+          <TouchableOpacity
+            onPress={() => setErrorModalVisible(false)}
+            className="w-full py-4 rounded-xl"
+            style={{ backgroundColor: theme.primary[300] }}
+          >
+            <Text className="text-center font-rubik-bold text-base text-white">
+              Try Again
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 
   return (
     <SafeAreaView
@@ -1398,6 +1585,8 @@ const AddPropertyScreen = () => {
       {renderTypeModal()}
       {renderFacilitiesModal()}
       {renderCurfewModal()}
+      {renderSuccessModal()}
+      {renderErrorModal()}
     </SafeAreaView>
   );
 };

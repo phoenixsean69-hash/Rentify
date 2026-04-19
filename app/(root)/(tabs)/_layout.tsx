@@ -1,4 +1,5 @@
-import { Tabs } from "expo-router";
+import { Tabs, useFocusEffect } from "expo-router";
+import { useCallback, useEffect } from "react";
 import {
   Image,
   ImageSourcePropType,
@@ -9,6 +10,8 @@ import {
 } from "react-native";
 
 import icons from "@/constants/icons";
+import useAuthStore from "@/store/auth.store";
+import { useMatchStore } from "@/store/match.store";
 import { Colors } from "../../../constants/Colors";
 
 // Ignore specific warnings that are not critical
@@ -34,33 +37,64 @@ const TabIcon = ({
   focused,
   icon,
   title,
+  badgeCount,
 }: {
   focused: boolean;
   icon: ImageSourcePropType;
   title: string;
-}) => (
-  <View className="flex-1 mt-3 flex flex-col items-center">
-    <Image
-      source={icon}
-      tintColor={focused ? "#0061FF" : "#666876"}
-      resizeMode="contain"
-      className="size-6"
-    />
-    <Text
-      className={`${
-        focused
-          ? "text-primary-300 font-rubik-medium"
-          : "text-black-200 font-rubik"
-      } text-xs w-full text-center mt-1`}
-    >
-      {title}
-    </Text>
-  </View>
-);
-
-const TabsLayout = () => {
+  badgeCount?: number;
+}) => {
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
+
+  return (
+    <View className="flex-1 mt-2 flex flex-col items-center relative">
+      <Image
+        source={icon}
+        tintColor={focused ? theme.primary[300] : theme.muted}
+        resizeMode="contain"
+        className="size-6"
+      />
+      <Text
+        className={`text-xs w-full text-center mt-0 ${
+          focused ? "font-rubik-medium" : "font-rubik"
+        }`}
+        style={{ color: focused ? theme.primary[300] : theme.text }}
+      >
+        {title}
+      </Text>
+
+      {/* Badge for Match tab */}
+      {badgeCount !== undefined && badgeCount > 0 && (
+        <View className="absolute -top-1 -right-2 bg-red-500 rounded-full min-w-[18px] h-[18px] px-1 items-center justify-center">
+          <Text className="text-white text-xs font-bold">
+            {badgeCount > 99 ? "99+" : badgeCount}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+const TabsLayout = () => {
+  const { user } = useAuthStore();
+  const { matchCount, fetchMatchCount, markMatchesAsViewed } = useMatchStore();
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
+
+  useEffect(() => {
+    if (user?.accountId) {
+      fetchMatchCount(user.accountId);
+    }
+  }, [user, fetchMatchCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.accountId) {
+        fetchMatchCount(user.accountId);
+      }
+    }, [user, fetchMatchCount]),
+  );
 
   return (
     <Tabs
@@ -70,11 +104,12 @@ const TabsLayout = () => {
         tabBarShowLabel: false,
         tabBarStyle: {
           backgroundColor: theme.navBackground,
-
           position: "absolute",
           borderTopColor: "#0061FF1A",
-          borderTopWidth: 1,
-          minHeight: 70,
+          borderTopWidth: 2,
+          minHeight: 80,
+          paddingTop: 0,
+          paddingBottom: 10,
         },
       }}
     >
@@ -90,30 +125,45 @@ const TabsLayout = () => {
       />
 
       <Tabs.Screen
-        name="about"
-        options={{
-          href: null,
-          title: "about",
-          headerShown: false,
-        }}
-      />
-
-      <Tabs.Screen
         name="help"
         options={{
           href: null,
           title: "help",
           headerShown: false,
+          tabBarStyle: { display: "none" },
         }}
       />
+
+      <Tabs.Screen
+        name="detailsEdit"
+        options={{
+          href: null,
+          title: "detailsEdit",
+          headerShown: false,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
       <Tabs.Screen
         name="calendar"
         options={{
           href: null,
-          title: "help",
+          title: "calendar",
           headerShown: false,
+          tabBarStyle: { display: "none" },
         }}
       />
+
+      <Tabs.Screen
+        name="about"
+        options={{
+          href: null,
+          title: "about",
+          headerShown: false,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
       <Tabs.Screen
         name="language"
         options={{
@@ -122,6 +172,17 @@ const TabsLayout = () => {
           headerShown: false,
         }}
       />
+
+      <Tabs.Screen
+        name="all-locations"
+        options={{
+          href: null,
+          title: "all-locations",
+          headerShown: false,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
       <Tabs.Screen
         name="notifications"
         options={{
@@ -135,16 +196,19 @@ const TabsLayout = () => {
         name="properties-by-location"
         options={{
           href: null,
-          title: "notifications",
+          title: "properties-by-location",
           headerShown: false,
+          tabBarStyle: { display: "none" },
         }}
       />
+
       <Tabs.Screen
         name="trending-properties"
         options={{
           href: null,
-          title: "notifications",
+          title: "trending-properties",
           headerShown: false,
+          tabBarStyle: { display: "none" },
         }}
       />
 
@@ -152,8 +216,9 @@ const TabsLayout = () => {
         name="filtered-properties"
         options={{
           href: null,
-          title: "notifications",
+          title: "filtered-properties",
           headerShown: false,
+          tabBarStyle: { display: "none" },
         }}
       />
 
@@ -165,17 +230,9 @@ const TabsLayout = () => {
           headerShown: false,
         }}
       />
-      <Tabs.Screen
-        name="my-favorites"
-        options={{
-          href: null,
-          title: "my-favorites",
-          headerShown: false,
-        }}
-      />
 
       <Tabs.Screen
-        name="message"
+        name="my-favorites"
         options={{
           href: null,
           title: "my-favorites",
@@ -183,6 +240,17 @@ const TabsLayout = () => {
           tabBarStyle: { display: "none" },
         }}
       />
+
+      <Tabs.Screen
+        name="message"
+        options={{
+          href: null,
+          title: "message",
+          headerShown: false,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
       <Tabs.Screen
         name="profile"
         options={{
@@ -190,6 +258,22 @@ const TabsLayout = () => {
           headerShown: false,
           tabBarIcon: ({ focused }) => (
             <TabIcon focused={focused} icon={icons.person} title="Profile" />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="match"
+        options={{
+          title: "Match",
+          headerShown: false,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              focused={focused}
+              icon={icons.send}
+              title="Match"
+              badgeCount={matchCount}
+            />
           ),
         }}
       />

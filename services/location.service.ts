@@ -100,10 +100,7 @@ class LocationService {
       const cityProperties = properties.documents.filter((property: any) => {
         const address = property.address || "";
         const extractedCity = this.extractCityFromAddress(address);
-
-        return (
-          extractedCity && extractedCity.toLowerCase() === city.toLowerCase()
-        );
+        return extractedCity?.toLowerCase() === city?.toLowerCase();
       });
 
       return cityProperties;

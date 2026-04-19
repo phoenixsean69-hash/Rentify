@@ -21,9 +21,9 @@ import AIChatModal from "@/components/chat-support";
 
 export default function Help() {
   const { user } = useAuthStore();
-  const [copied, setCopied] = useState(false);
   const [chatModalVisible, setChatModalVisible] = useState(false);
   const [faqModalVisible, setFaqModalVisible] = useState(false);
+  const [expandedFaqs, setExpandedFaqs] = useState<Set<number>>(new Set());
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
 
@@ -38,7 +38,7 @@ export default function Help() {
   };
 
   const handleEmailPress = async () => {
-    await Linking.openURL("mailto:support@rentify.com");
+    await Linking.openURL("mailto:support@nookly.com");
   };
 
   const handleCallPress = () => {
@@ -58,6 +58,16 @@ export default function Help() {
       ],
       { cancelable: true },
     );
+  };
+
+  const toggleExpand = (faqId: number) => {
+    const newExpanded = new Set(expandedFaqs);
+    if (newExpanded.has(faqId)) {
+      newExpanded.delete(faqId);
+    } else {
+      newExpanded.add(faqId);
+    }
+    setExpandedFaqs(newExpanded);
   };
 
   const faqs = [
@@ -114,21 +124,21 @@ export default function Help() {
       id: 8,
       question: "How do I report a suspicious listing?",
       answer:
-        "If you encounter a suspicious listing, tap the three dots menu on the property page and select 'Report'. Our team will review it within 24 hours. You can also email us at safety@rentify.com with the property link and details.",
+        "If you encounter a suspicious listing, tap the three dots menu on the property page and select 'Report'. Our team will review it within 24 hours. You can also email us at safety@nookly.com with the property link and details.",
       category: "Safety",
     },
     {
       id: 9,
-      question: "Is Rentify free to use?",
+      question: "Is Nookly free to use?",
       answer:
-        "Yes! Rentify is 100% free for both tenants and landlords. We don't charge any listing fees, commission, or subscription fees. Premium features like featured listings and analytics will be available soon.",
+        "Yes! Nookly is 100% free for both tenants and landlords. We don't charge any listing fees, commission, or subscription fees. Premium features like featured listings and analytics will be available soon.",
       category: "Pricing",
     },
     {
       id: 10,
       question: "How do I enable notifications?",
       answer:
-        "To enable notifications, go to your device Settings → Apps → Rentify → Notifications → Toggle ON. In the app, you can customize what notifications you receive in Settings → Notifications Preferences.",
+        "To enable notifications, go to your device Settings → Apps → Nookly → Notifications → Toggle ON. In the app, you can customize what notifications you receive in Settings → Notifications Preferences.",
       category: "Settings",
     },
     {
@@ -142,7 +152,7 @@ export default function Help() {
       id: 12,
       question: "What payment methods are accepted?",
       answer:
-        "Rentify is currently free to use. When premium features launch, we'll accept credit/debit cards, PayPal, and mobile money. All payments are processed securely through our payment partners.",
+        "Nookly is currently free to use. When premium features launch, we'll accept credit/debit cards, PayPal, and mobile money. All payments are processed securely through our payment partners.",
       category: "Pricing",
     },
   ];
@@ -152,7 +162,7 @@ export default function Help() {
       icon: "mail-outline",
       title: "Email Support",
       description: "Get response within 24 hours",
-      value: "support@rentify.com",
+      value: "support@nookly.com",
       onPress: handleEmailPress,
       color: "#3B82F6",
     },
@@ -160,7 +170,7 @@ export default function Help() {
       icon: "call-outline",
       title: "Phone Support",
       description: "Mon-Fri, 9 AM - 6 PM",
-      value: " Tap to see contact numbers",
+      value: "Tap to see contact numbers",
       onPress: handleCallPress,
       color: "#10B981",
     },
@@ -186,39 +196,49 @@ export default function Help() {
     {} as Record<string, typeof faqs>,
   );
 
-  const renderFAQItem = (faq: (typeof faqs)[0]) => (
-    <TouchableOpacity
-      key={faq.id}
-      className="p-4 rounded-2xl mb-3"
-      style={{
-        backgroundColor: theme.surface,
-        borderWidth: 1,
-        borderColor: theme.muted + "30",
-      }}
-      onPress={() => {}}
-    >
-      <View className="flex-row items-start">
-        <View className="w-6 h-6 rounded-full items-center justify-center mr-3 mt-0.5">
-          <Ionicons name="help-circle" size={20} color={theme.primary[300]} />
+  const renderFAQItem = (faq: (typeof faqs)[0]) => {
+    const isExpanded = expandedFaqs.has(faq.id);
+
+    return (
+      <TouchableOpacity
+        key={faq.id}
+        className="p-4 rounded-2xl mb-3"
+        style={{
+          backgroundColor: theme.surface,
+          borderWidth: 1,
+          borderColor: theme.muted + "30",
+        }}
+        onPress={() => toggleExpand(faq.id)}
+        activeOpacity={0.7}
+      >
+        <View className="flex-row items-start">
+          <View className="w-6 h-6 rounded-full items-center justify-center mr-3 mt-0.5">
+            <Ionicons
+              name={isExpanded ? "remove-circle" : "add-circle"}
+              size={20}
+              color={theme.primary[300]}
+            />
+          </View>
+          <View className="flex-1">
+            <Text
+              className="text-base font-rubik-medium mb-1"
+              style={{ color: theme.text }}
+            >
+              {faq.question}
+            </Text>
+            {isExpanded && (
+              <Text
+                className="text-sm leading-5 mt-2"
+                style={{ color: theme.muted }}
+              >
+                {faq.answer}
+              </Text>
+            )}
+          </View>
         </View>
-        <View className="flex-1">
-          <Text
-            className="text-base font-rubik-medium mb-1"
-            style={{ color: theme.text }}
-          >
-            {faq.question}
-          </Text>
-          <Text
-            className="text-sm"
-            style={{ color: theme.muted }}
-            numberOfLines={2}
-          >
-            {faq.answer}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView
@@ -278,7 +298,7 @@ export default function Help() {
           </View>
         </LinearGradient>
 
-        {/* Quick Stats - Redesigned */}
+        {/* Quick Stats */}
         <View className="mx-4 mt-6">
           <Text
             className="text-lg font-rubik-bold mb-3"
@@ -373,30 +393,30 @@ export default function Help() {
               }}
             >
               <LinearGradient
-                colors={[theme.danger + "10", theme.danger + "05"]}
+                colors={[theme.primary[300] + "10", theme.primary[300] + "05"]}
                 className="p-4 items-center"
               >
                 <View
                   className="w-12 h-12 rounded-full items-center justify-center mb-2"
-                  style={{ backgroundColor: theme.danger + "20" }}
+                  style={{ backgroundColor: theme.primary[300] + "20" }}
                 >
                   <Ionicons
-                    name="star-outline"
+                    name="people-outline"
                     size={24}
-                    color={theme.danger}
+                    color={theme.primary[300]}
                   />
                 </View>
                 <Text
                   className="text-2xl font-rubik-bold"
-                  style={{ color: theme.danger }}
+                  style={{ color: theme.primary[300] }}
                 >
-                  100%
+                  1000+
                 </Text>
                 <Text
                   className="text-xs text-center mt-1"
                   style={{ color: theme.muted }}
                 >
-                  Satisfaction Rate
+                  Happy Users
                 </Text>
               </LinearGradient>
             </View>
@@ -477,7 +497,7 @@ export default function Help() {
                 className="text-sm font-rubik-medium"
                 style={{ color: theme.primary[300] }}
               >
-                View All
+                View All ({faqs.length})
               </Text>
             </TouchableOpacity>
           </View>
@@ -545,7 +565,7 @@ export default function Help() {
               onPress={() => setFaqModalVisible(false)}
               className="mr-3 p-1"
             >
-              <Ionicons name="close" size={24} color={theme.title} />
+              <Ionicons name="arrow-back" size={24} color={theme.title} />
             </TouchableOpacity>
             <View className="flex-1">
               <Text
@@ -555,12 +575,9 @@ export default function Help() {
                 All FAQs
               </Text>
               <Text className="text-xs" style={{ color: theme.muted }}>
-                {faqs.length} articles available
+                {faqs.length} articles • Tap to expand
               </Text>
             </View>
-            <TouchableOpacity onPress={() => setFaqModalVisible(false)}>
-              <Ionicons name="search-outline" size={24} color={theme.title} />
-            </TouchableOpacity>
           </LinearGradient>
 
           <ScrollView

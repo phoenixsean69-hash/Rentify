@@ -100,7 +100,7 @@ const MyPropertiesModal = ({
                   <View className="flex-row items-center mt-2">
                     <Text className="text-sm font-rubik-bold">
                       {item.type === "Boarding"
-                        ? `$${item.price} /head`
+                        ? `$${item.price} /head/room`
                         : `$${item.price} /month`}
                     </Text>
                   </View>

@@ -1,5 +1,10 @@
 // store/auth.store.ts
-import { account, config, databases } from "@/lib/appwrite";
+import {
+  account,
+  config,
+  databases,
+  getDefaultAvatarUrl,
+} from "@/lib/appwrite";
 import { getData, removeData, storeData } from "@/lib/cache";
 import * as SecureStore from "expo-secure-store";
 import { ID, Query } from "react-native-appwrite";
@@ -114,7 +119,6 @@ const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  // Hydrate from cache - runs instantly on app start
   hydrate: async () => {
     console.log("💾 Hydrating auth state from cache...");
 
@@ -146,18 +150,39 @@ const useAuthStore = create<AuthState>((set, get) => ({
       setTimeout(async () => {
         try {
           const session = await account.getSession("current");
+
           if (session) {
-            // Session exists, fetch fresh user data in background
+            // ✅ Valid session → fetch fresh user
             await get().fetchAuthenticatedUser();
           } else {
-            // No valid session, clear cache
-            await get().clearCache();
-            set({ user: null, isAuthenticated: false });
+            // ⚠️ Session missing → ONLY clear if no cached user
+            const { user: cached } = get();
+
+            if (!cached) {
+              await get().clearCache();
+              set({ user: null, isAuthenticated: false });
+            } else {
+              console.log(
+                "⚠️ No session, but keeping cached user (offline mode)",
+              );
+            }
           }
         } catch (error) {
-          console.log("No active session, clearing cache");
-          await get().clearCache();
-          set({ user: null, isAuthenticated: false });
+          console.log("⚠️ Session check failed (likely offline)");
+
+          const { user: cached } = get();
+
+          if (!cached) {
+            // No cache → unauthenticated
+            set({ user: null, isAuthenticated: false });
+          } else {
+            // ✅ KEEP cached user (THIS IS THE FIX)
+            console.log("✅ Using cached user (offline mode)");
+            set({
+              user: cached,
+              isAuthenticated: true,
+            });
+          }
         } finally {
           set({ isInitialized: true });
         }
@@ -232,11 +257,24 @@ const useAuthStore = create<AuthState>((set, get) => ({
         set({ user: null, isAuthenticated: false, isLoading: false });
       }
     } catch (error) {
-      console.error("Error fetching authenticated user:", error);
-      // If we have cached user, keep it as fallback (offline mode)
-      const { user: cached, isAuthenticated: cachedAuth } = get();
-      if (!cached || !cachedAuth) {
-        set({ user: null, isAuthenticated: false, isLoading: false });
+      console.log("⚠️ Offline or session fetch failed");
+
+      const { user: cached } = get();
+
+      if (cached) {
+        // ✅ KEEP cached user (offline mode)
+        set({
+          user: cached,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+      } else {
+        // No cache → unauthenticated
+        set({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
       }
     } finally {
       set({ isLoading: false });
@@ -290,6 +328,7 @@ const useAuthStore = create<AuthState>((set, get) => ({
 
       const accountId = createValidAppwriteId();
       const userDocumentId = createValidAppwriteId();
+      const avatarUrl = userData.avatar?.trim() || getDefaultAvatarUrl(userData.name);
       const newAccount = await account.create(
         accountId,
         userData.email,
@@ -307,7 +346,7 @@ const useAuthStore = create<AuthState>((set, get) => ({
             name: userData.name,
             userMode: userData.userMode,
             email: userData.email,
-            avatar: userData.avatar || "",
+            avatar: avatarUrl,
             phone: userData.phone,
           },
         );
@@ -342,7 +381,7 @@ const useAuthStore = create<AuthState>((set, get) => ({
                 {
                   T_name: userData.name,
                   email: userData.email,
-                  avatar: userData.avatar || "",
+                  avatar: avatarUrl,
                   userDocId: userDocument.$id,
                 },
               );
@@ -367,18 +406,36 @@ const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  // In your auth.store.ts
   signOut: async () => {
     try {
-      await account.deleteSession("current");
-      await get().clearCache(); // Clear any cached data
+      // Try to delete the current session
+      try {
+        await account.deleteSession("current");
+      } catch (sessionError: any) {
+        // If error is about missing scopes or no session, that's fine
+        if (
+          sessionError?.message?.includes("missing scopes") ||
+          sessionError?.message?.includes("guest")
+        ) {
+          console.log("No active session to delete");
+        } else {
+          console.error("Error deleting session:", sessionError);
+        }
+      }
+
+      // Clear all cached data
+      await get().clearCache();
+
+      // Reset state
       set({ user: null, isAuthenticated: false, isLoading: false });
+
       return { success: true };
     } catch (error: any) {
-      return {
-        success: false,
-        error: error?.message || "An error occurred during sign out",
-      };
+      console.error("Sign out error:", error);
+      // Still return success since we want to clear local state
+      await get().clearCache();
+      set({ user: null, isAuthenticated: false, isLoading: false });
+      return { success: true };
     }
   },
 }));

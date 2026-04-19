@@ -281,7 +281,7 @@ class IntelligentResponseGenerator {
       technical:
         "🚨 I understand this is urgent! Let me get you immediate help:\n\n1. Try force closing and reopening the app\n2. Clear app cache in settings\n3. If issue persists, I'll connect you with a human agent right away\n\nShould I transfer you to a live agent?",
       account:
-        "🔐 I see this is urgent! Let's resolve your account issue:\n\n• Check your email for password reset link\n• Make sure you're using correct credentials\n• Need immediate help? Contact support@rentify.com with 'URGENT' in subject\n\nWhat specific issue are you facing?",
+        "🔐 I see this is urgent! Let's resolve your account issue:\n\n• Check your email for password reset link\n• Make sure you're using correct credentials\n• Need immediate help? Contact support@nookly.com with 'URGENT' in subject\n\nWhat specific issue are you facing?",
       default:
         "⚠️ I see this is urgent! Let me prioritize your issue:\n\nWhat specific problem are you experiencing? I'll do my best to help quickly!",
     };
@@ -350,13 +350,13 @@ class IntelligentResponseGenerator {
   }
 
   private getPricingResponse(): string {
-    return `💰 **Rentify is 100% FREE!**\n\n**What's Free:**\n✅ Unlimited property listings\n✅ No commission fees\n✅ Direct messaging\n✅ Favorites & saved searches\n✅ 24/7 AI support\n\n**Coming Soon (Premium):**\n✨ Featured listings\n✨ Analytics dashboard\n✨ Priority support\n✨ Virtual tours\n\nYou're getting amazing value already! 🎉`;
+    return `💰 **Nookly is 100% FREE!**\n\n**What's Free:**\n✅ Unlimited property listings\n✅ No commission fees\n✅ Direct messaging\n✅ Favorites & saved searches\n✅ 24/7 AI support\n\n**Coming Soon (Premium):**\n✨ Featured listings\n✨ Analytics dashboard\n✨ Priority support\n✨ Virtual tours\n\nYou're getting amazing value already! 🎉`;
   }
 
   private getTechnicalResponse(entities: any[], urgency: string): string {
     const troubleshooting = [
       "🔄 Force close & restart app",
-      "🗑️ Clear app cache (Settings → Apps → Rentify → Clear Cache)",
+      "🗑️ Clear app cache (Settings → Apps → Nookly → Clear Cache)",
       "📱 Update to latest version (Play Store/App Store)",
       "📡 Check internet connection",
       "🔄 Log out and back in",
@@ -384,7 +384,7 @@ class IntelligentResponseGenerator {
   }
 
   private getSafetyResponse(): string {
-    return `🛡️ **Stay Safe on Rentify**\n\n**⚠️ DO:**\n• ✅ Verify property details\n• ✅ Meet in public places\n• ✅ Use in-app messaging\n• ✅ Trust your instincts\n• ✅ Report suspicious listings\n\n**❌ DON'T:**\n• ❌ Share banking info\n• ❌ Pay before viewing\n• ❌ Wire transfers\n• ❌ Share passwords\n• ❌ Ignore red flags\n\nYour safety is our priority! 🚨 Report suspicious activity immediately.`;
+    return `🛡️ **Stay Safe on Nookly**\n\n**⚠️ DO:**\n• ✅ Verify property details\n• ✅ Meet in public places\n• ✅ Use in-app messaging\n• ✅ Trust your instincts\n• ✅ Report suspicious listings\n\n**❌ DON'T:**\n• ❌ Share banking info\n• ❌ Pay before viewing\n• ❌ Wire transfers\n• ❌ Share passwords\n• ❌ Ignore red flags\n\nYour safety is our priority! 🚨 Report suspicious activity immediately.`;
   }
 
   private getGratitudeResponse(): string {
@@ -398,7 +398,7 @@ class IntelligentResponseGenerator {
   }
 
   private getFarewellResponse(): string {
-    return `👋 Thanks for chatting! Here's how to reach us:\n\n📧 Email: support@rentify.com\n📞 Phone: +263 77 114 4469\n\+263 77 600 6288\n\💬 Come back anytime!\n\nHave a great day! `;
+    return `👋 Thanks for chatting! Here's how to reach us:\n\n📧 Email: support@nookly.com\n📞 Phone: +263 77 114 4469\n\+263 77 600 6288\n\💬 Come back anytime!\n\nHave a great day! `;
   }
 
   private getHelpResponse(): string {
@@ -435,7 +435,7 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ visible, onClose }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
-      text: "👋 Hi there! I'm your intelligent Rentify assistant.\n\nI can help you with:\n Finding or listing properties\n Account & security\n Technical support\n Pricing & features\n Reviews & ratings\n\nWhat can I help you with today?",
+      text: "👋 Hi there! I'm your intelligent Nookly assistant.\n\nI can help you with:\n Finding or listing properties\n Account & security\n Technical support\n Pricing & features\n Reviews & ratings\n\nWhat can I help you with today?",
       isUser: false,
       timestamp: new Date(),
       sentiment: "positive",
@@ -607,7 +607,7 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ visible, onClose }) => {
                 className="text-lg font-rubik-bold"
                 style={{ color: theme.title }}
               >
-                Rentify AI Assistant
+                Nookly AI Assistant
               </Text>
               <View className="flex-row items-center">
                 <View className="w-2 h-2 rounded-full bg-green-500 mr-1" />
@@ -690,7 +690,7 @@ const AIChatModal: React.FC<AIChatModalProps> = ({ visible, onClose }) => {
               <TextInput
                 value={inputText}
                 onChangeText={setInputText}
-                placeholder="Ask me anything about Rentify..."
+                placeholder="Ask me anything about Nookly..."
                 placeholderTextColor={theme.muted}
                 multiline
                 className="max-h-32"

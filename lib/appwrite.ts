@@ -121,6 +121,8 @@ export const config = {
   notificationsCollectionId:
     process.env.EXPO_PUBLIC_APPWRITE_NOTIFICATIONS_COLLECTION,
   requestsCollectionId: process.env.EXPO_PUBLIC_APPWRITE_REQUESTS_COLLECTION,
+  matchProfilesCollectionId:
+    process.env.EXPO_PUBLIC_MATCH_PROFILES_COLLECTION_ID,
 };
 
 interface CreateUserParams {
@@ -129,6 +131,7 @@ interface CreateUserParams {
   phone: string;
   name: string;
   userMode: string;
+  avatar?: string;
 }
 
 interface SignInParams {
@@ -146,9 +149,13 @@ export const databases = new Databases(client);
 export const storage = new Storage(client);
 const avatars = new Avatars(client);
 
-// ---------------- USER ----------------
+export const getDefaultAvatarUrl = (name: string): string => {
+  const encodedName = encodeURIComponent(name.trim() || "User");
+  return `https://ui-avatars.com/api/?name=${encodedName}&background=random&color=fff&size=100&bold=true&format=png`;
+};
 
-//  createUser
+// ---------------- USER ----------------
+// createUser function
 
 export const createUser = async ({
   email,
@@ -156,20 +163,36 @@ export const createUser = async ({
   name,
   phone,
   userMode,
+  avatar,
 }: CreateUserParams) => {
+  let createdAccountId = null;
+
   try {
+    // First, validate all inputs before any database operation
+    if (!email || !password || !name || !phone || !userMode) {
+      throw new Error("All fields are required");
+    }
+
+    if (password.length < 8) {
+      throw new Error("Password must be at least 8 characters");
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error("Please enter a valid email address");
+    }
+
     const accountId = createValidAppwriteId();
     const userDocumentId = createValidAppwriteId();
+    createdAccountId = accountId;
+
     console.log("createUser: generated accountId", accountId);
 
     // Create account in Appwrite Auth
     const newAccount = await account.create(accountId, email, password, name);
     if (!newAccount) throw new Error("Failed to create account");
 
-    // Sign in the user
-
-    // Create avatar URL
-    const avatarUrl = avatars.getInitialsURL(name);
+    const avatarUrl = avatar?.trim() || getDefaultAvatarUrl(name);
 
     // Create user document in users collection
     const userDoc = await databases.createDocument(
@@ -186,47 +209,46 @@ export const createUser = async ({
       },
     );
 
-    // 🚀 If user is a landlord, also add them to the agents collection
+    // If user is a landlord, add them to the agents collection
     if (userMode?.toLowerCase() === "landlord") {
-      console.log("========== LANDLORD DETECTED ==========");
-      console.log("createUser: Adding to agents collection...");
-      console.log("Agents Collection ID:", config.agentsCollectionId);
-      console.log("Database ID:", config.databaseId);
-
       try {
         const agentId = createValidAppwriteId();
-        const agentDoc = await databases.createDocument(
+        await databases.createDocument(
           config.databaseId!,
           config.agentsCollectionId!,
           agentId,
           {
-            // Using T_name instead of name to match your schema
-            name: name, // Changed from 'name' to 'name'
-            email: email, // This matches your schema
-            avatar: avatarUrl, // This matches your schema
-            // Optional: Add phone if your schema has it
-            // phone: phone,
+            name: name,
+            email: email,
+            avatar: avatarUrl,
           },
         );
-        console.log(
-          "✅ Landlord added to agents collection with ID:",
-          agentDoc.$id,
-        );
+        console.log("✅ Landlord added to agents collection");
       } catch (agentError) {
         console.error(
           "Error adding landlord to agents collection:",
           agentError,
         );
-        // Don't throw - user was created successfully, but agent record failed
+        // Don't throw - user was created successfully
       }
-    } else {
-      console.log("createUser: User is a tenant, skipping agents collection");
     }
-    await signIn({ email, password });
 
+    await signIn({ email, password });
     return userDoc;
   } catch (error: any) {
     console.log("createUser error:", error);
+
+    // Rollback: If Auth account was created but something else failed, delete it
+    if (createdAccountId) {
+      try {
+        await account.deleteSession("current");
+        await account.deleteIdentity(createdAccountId);
+        console.log("✅ Rollback: Deleted orphaned Auth account");
+      } catch (rollbackError) {
+        console.error("Rollback failed:", rollbackError);
+      }
+    }
+
     throw new Error(error?.message || "Failed to create user");
   }
 };
@@ -284,25 +306,28 @@ export async function uploadImage(image: any) {
   }
 }
 
-export async function AddListing(listing: {
-  propertyName?: string;
-  type: string;
-  description: string;
-  address: string;
-  price: number;
-  area: number;
-  curfew: string;
-  isAvailable: boolean;
-  roomFor: number;
-  bedrooms: number;
-  bathrooms: number;
-  facilities: string;
-  image1?: string;
-  image2?: string;
-  image3?: string;
-  agent?: string; // This should be the user's $id (document ID)
-  creatorId?: string;
-}) {
+export async function AddListing(
+  listing: {
+    propertyName?: string;
+    type: string;
+    description: string;
+    address: string;
+    price: number;
+    area: number;
+    curfew: string;
+    isAvailable: boolean;
+    roomFor: number;
+    bedrooms: number;
+    bathrooms: number;
+    facilities: string;
+    image1?: string;
+    image2?: string;
+    image3?: string;
+    agent?: string;
+    creatorId?: string;
+  },
+  onSuccess?: (newListing: any) => void, // Callback function
+) {
   try {
     console.log("Creating listing with agent (user $id):", listing.agent);
 
@@ -322,12 +347,10 @@ export async function AddListing(listing: {
         bathrooms: listing.bathrooms,
         facilities: listing.facilities,
         curfew: listing.curfew,
-        isAvailable: listing.isAvailable ?? true, // Default to true
+        isAvailable: listing.isAvailable ?? true,
         image1: listing.image1 || null,
         image2: listing.image2 || null,
         image3: listing.image3 || null,
-
-        // This should match a document ID in the Users table
         agent: listing.agent || null,
         creatorId: listing.creatorId || null,
       },
@@ -335,8 +358,13 @@ export async function AddListing(listing: {
 
     console.log("✅ Listing created:", {
       id: response.$id,
-      agent: response.agent, // Should now be the user's $id
+      agent: response.agent,
     });
+
+    // Call the success callback if provided
+    if (onSuccess) {
+      onSuccess(response);
+    }
 
     return response;
   } catch (error) {
@@ -390,10 +418,10 @@ export async function loginWithGoogle(userMode?: "tenant" | "landlord") {
       OAuthProvider.Google,
       redirectUri,
     );
-    if (!response) throw new Error("OAuth failed");
+    if (!response || !response.toString()) throw new Error("OAuth failed");
 
     const browserResult = await openAuthSessionAsync(
-      response.toString(),
+      response.href,
       redirectUri,
     );
     if (browserResult.type !== "success") throw new Error("OAuth failed");
@@ -530,34 +558,63 @@ export const getFavoritesByUser = async (favoriteDocumentId: string) => {
   }
 };
 
+// lib/appwrite.ts - Fix the logout function
+
+// lib/appwrite.ts
+
 export async function logout() {
   try {
-    await account.deleteSession("current");
-    return true;
+    // First, check if there's an active session
+    try {
+      const session = await account.getSession("current");
+      if (session) {
+        await account.deleteSession("current");
+      }
+    } catch (sessionError) {
+      // No active session, that's fine
+      console.log("No active session found");
+    }
+    return { success: true };
   } catch (error) {
-    console.error("Logout error:", error);
-    return false;
+    console.error("Error logging out:", error);
+    // Even if there's an error, return success since the user is effectively logged out
+    return { success: true };
   }
 }
 
 // ---------------- AVATAR ----------------
 
-export async function updateUserAvatar(userId: string, avatarId: string) {
-  try {
-    const userDocs = await databases.listDocuments(
-      config.databaseId!,
-      config.usersCollectionId!,
-      [Query.equal("accountId", userId)],
-    );
-    if (userDocs.documents.length === 0) throw new Error("User not found");
+// lib/appwrite.ts
 
-    const userDoc = userDocs.documents[0];
-    return await databases.updateDocument(
+export async function updateUserAvatar(userId: string, avatarUrl: string) {
+  try {
+    // First, find the user document by userId (which might be accountId or document ID)
+    let userDocId = userId;
+
+    // If userId looks like an accountId (not a document ID), look it up
+    if (userId.length < 36) {
+      const userDocs = await databases.listDocuments(
+        config.databaseId!,
+        config.usersCollectionId!,
+        [Query.equal("accountId", userId)],
+      );
+
+      if (userDocs.documents.length === 0) {
+        console.error("User not found with accountId:", userId);
+        throw new Error("User not found");
+      }
+      userDocId = userDocs.documents[0].$id;
+    }
+
+    // Update the user document
+    const result = await databases.updateDocument(
       config.databaseId!,
       config.usersCollectionId!,
-      userDoc.$id,
-      { customAvatar: avatarId },
+      userDocId,
+      { avatar: avatarUrl },
     );
+
+    return result;
   } catch (error) {
     console.error("Error updating avatar:", error);
     throw error;
@@ -576,16 +633,6 @@ export const getReviewsByProperty = async (propertyId: string) => {
   return res.documents;
 };
 
-// Toggle review (add/remove)
-// Toggle review (add/remove) - ADAPTED FOR YOUR SCHEMA
-// lib/appwrite.ts
-
-// lib/appwrite.ts
-
-// lib/appwrite.ts - Update addReview
-
-// lib/appwrite.ts - Update addReview with more logs
-// Key for storing user's reviews
 const USER_REVIEWS_KEY = "user_reviews";
 
 export const addReview = async (
@@ -832,8 +879,8 @@ export async function getProperties({
         Query.search("description", query),
         Query.search("address", query),
         Query.search("type", query),
-        Query.search("price", query),
-      ];
+        ...(!isNaN(Number(query)) ? [Query.equal("price", Number(query))] : []),
+      ].filter((q): q is string => q !== null);
       buildQuery.push(Query.or(searchFields));
     }
     if (filter && filter !== "All")
@@ -991,12 +1038,6 @@ export async function getUserLikedProperties(userId: string) {
     return [];
   }
 }
-
-// ---------------- PROPERTY BY ID ----------------
-
-// In your appwrite.ts
-// ---------------- PROPERTY BY ID ----------------
-// lib/appwrite.ts - Update getPropertyById
 
 export async function getPropertyById({ id }: { id: string }) {
   try {
@@ -1572,14 +1613,6 @@ function formatTimeAgo(date: Date): string {
   return `${Math.floor(diffInSeconds / 86400)} days ago`;
 }
 
-// For tenant home screen - only show available properties
-// For tenant home screen - only show available properties
-// lib/appwrite.ts - Update getAvailableProperties
-
-// lib/appwrite.ts - Update getAvailableProperties
-
-// lib/appwrite.ts
-// lib/appwrite.ts
 export async function getAvailableProperties({
   filter,
   query,
@@ -1955,113 +1988,162 @@ export async function testCreateNotification() {
   }
 }
 
-export const requestProperty = async (propertyId: string, userId: string) => {
+// lib/appwrite.ts - Fix the requestProperty function
+
+export const requestProperty = async (
+  propertyId: string,
+  tenantId: string,
+  requestData?: {
+    proposedPrice?: number;
+    message?: string;
+    moveInDate?: string;
+    leaseDuration?: string;
+    questions?: string[];
+    originalPrice?: number;
+    propertyName?: string;
+    tenantName?: string;
+    tenantEmail?: string;
+  },
+) => {
   try {
-    // 1. Get property details (we need propertyName, creatorId)
+    console.log("📝 Starting requestProperty...");
+    console.log("Property ID:", propertyId);
+    console.log("Tenant ID:", tenantId);
+    console.log("Request Data:", requestData);
+
+    // Get property details to include in the request
     const property = await databases.getDocument(
       config.databaseId!,
       config.propertiesCollectionId!,
       propertyId,
     );
 
-    // 2. Get tenant details (name) from users collection
-    const userDocs = await databases.listDocuments(
-      config.databaseId!,
-      config.usersCollectionId!,
-      [Query.equal("accountId", userId)],
-    );
-    let tenantName = "Tenant";
-    if (userDocs.documents.length > 0) {
-      tenantName = userDocs.documents[0].name;
-    } else {
-      // Fallback: try to get from account API
-      try {
-        const currentAccount = await account.get();
-        tenantName = currentAccount.name;
-      } catch (e) {}
+    console.log("✅ Property found:", property.propertyName);
+    console.log("Property creatorId:", property.creatorId);
+
+    // Get tenant details
+    let tenantName = requestData?.tenantName;
+    let tenantEmail = requestData?.tenantEmail;
+
+    if (!tenantName || !tenantEmail) {
+      const userDocs = await databases.listDocuments(
+        config.databaseId!,
+        config.usersCollectionId!,
+        [Query.equal("accountId", tenantId)],
+      );
+      if (userDocs.documents.length > 0) {
+        tenantName = tenantName || userDocs.documents[0].name;
+        tenantEmail = tenantEmail || userDocs.documents[0].email;
+        console.log("✅ Tenant details fetched:", { tenantName, tenantEmail });
+      }
     }
 
-    // 3. Create a request document in the "requests" collection
-    const requestDoc = await databases.createDocument(
+    // Create the request document with all data
+    const request = await databases.createDocument(
       config.databaseId!,
-      config.requestsCollectionId!, // <-- new collection ID
-      ID.unique(),
+      config.requestsCollectionId!,
+      "unique()",
       {
-        propertyId: property.$id,
-        propertyName: property.propertyName,
-        tenantId: userId,
-        tenantName: tenantName,
+        propertyId: propertyId,
+        propertyName: property.propertyName || "Property",
+        tenantId: tenantId,
+        tenantName: tenantName || "Tenant",
+        tenantEmail: tenantEmail || "",
         status: "pending",
+        // Enhanced fields
+        proposedPrice: requestData?.proposedPrice || property.price,
+        originalPrice: property.price,
+        message: requestData?.message || "",
+        moveInDate: requestData?.moveInDate || "",
+        leaseDuration: requestData?.leaseDuration || "",
+        questions: requestData?.questions
+          ? JSON.stringify(requestData.questions)
+          : "[]",
       },
     );
 
-    // 4. (Optional) Update property's request counter for quick display
-    const currentRequests = property.requests || 0;
-    await databases.updateDocument(
-      config.databaseId!,
-      config.propertiesCollectionId!,
-      propertyId,
-      { requests: currentRequests + 1 },
-    );
+    console.log("✅ Request document created:", request.$id);
 
-    // 5. Save to local applications for tenant stats (AsyncStorage)
-    const applicationsKey = `user_applications_${userId}`;
-    const existing = await AsyncStorage.getItem(applicationsKey);
-    const applications = existing ? JSON.parse(existing) : [];
-    applications.push({
-      requestId: requestDoc.$id,
-      propertyId: property.$id,
-      propertyName: property.propertyName,
-      date: new Date().toISOString(),
-      status: "pending",
-    });
-    await AsyncStorage.setItem(applicationsKey, JSON.stringify(applications));
+    // First, get the landlord's user document ID
+    let landlordUserDocId = property.creatorId;
 
-    // 6. Send notification to landlord (optional)
-    if (property.creatorId) {
-      await createNotification(
+    console.log("Looking up landlord with creatorId:", property.creatorId);
+
+    // Check if property.creatorId is an accountId (not a document ID)
+    // Appwrite document IDs are typically longer and don't contain special chars
+    if (property.creatorId && property.creatorId.length < 36) {
+      console.log(
+        "Looking up landlord document ID for accountId:",
         property.creatorId,
-        "New Rental Request! 📝",
-        `${tenantName} has requested to rent "${property.propertyName}"`,
-        "request",
+      );
+      const landlordDocs = await databases.listDocuments(
+        config.databaseId!,
+        config.usersCollectionId!,
+        [Query.equal("accountId", property.creatorId)],
+      );
+
+      if (landlordDocs.documents.length > 0) {
+        landlordUserDocId = landlordDocs.documents[0].$id;
+        console.log("✅ Found landlord document ID:", landlordUserDocId);
+      } else {
+        console.error(
+          "❌ Landlord not found for accountId:",
+          property.creatorId,
+        );
+      }
+    }
+
+    // Create notification for landlord using the correct document ID
+    if (landlordUserDocId) {
+      const notificationMessage = `${tenantName || "A tenant"} has requested to rent "${property.propertyName}"${
+        requestData?.proposedPrice &&
+        requestData.proposedPrice !== property.price
+          ? ` with a proposed price of $${requestData.proposedPrice}/month`
+          : ""
+      }.`;
+
+      console.log("📧 Creating notification for landlord:", {
+        userId: landlordUserDocId,
+        title: "📝 New Rental Request",
+        message: notificationMessage,
+      });
+
+      const notification = await databases.createDocument(
+        config.databaseId!,
+        config.notificationsCollectionId!,
+        "unique()",
         {
-          requestId: requestDoc.$id,
-          propertyId: property.$id,
-          propertyName: property.propertyName,
-          tenantId: userId,
-          tenantName: tenantName,
+          userId: landlordUserDocId, // Use the document ID from users collection
+          title: "📝 New Rental Request",
+          message: notificationMessage,
+          type: "request",
+          data: JSON.stringify({
+            requestId: request.$id,
+            propertyId: propertyId,
+            propertyName: property.propertyName,
+            tenantId: tenantId,
+            tenantName: tenantName,
+            proposedPrice: requestData?.proposedPrice,
+            originalPrice: property.price,
+          }),
+          read: false,
         },
+      );
+
+      console.log("✅ Notification created for landlord:", notification.$id);
+    } else {
+      console.error(
+        "❌ Could not create notification - no landlord user ID found",
       );
     }
 
-    return { success: true, request: requestDoc };
+    return request;
   } catch (error) {
-    console.error("Error requesting property:", error);
+    console.error("❌ Error creating rental request:", error);
     throw error;
   }
 };
 
-export const incrementPropertyViews = async (propertyId: string) => {
-  try {
-    const property = await databases.getDocument(
-      config.databaseId!,
-      config.propertiesCollectionId!,
-      propertyId,
-    );
-    const currentViews = property.views || 0;
-    await databases.updateDocument(
-      config.databaseId!,
-      config.propertiesCollectionId!,
-      propertyId,
-      { views: currentViews + 1 },
-    );
-  } catch (error) {
-    console.error("Error incrementing views:", error);
-  }
-};
-
-// lib/appwrite.ts
-// lib/appwrite.ts
 export const markAllNotificationsAsRead = async (userId: string) => {
   try {
     console.log("🔔 markAllNotificationsAsRead called for userId:", userId);
@@ -2422,5 +2504,499 @@ export const cleanupOldAppwriteNotifications = async (userId: string) => {
   } catch (error) {
     console.error("Error cleaning up old notifications:", error);
     return 0;
+  }
+};
+
+// Complete solution with cleanup and limits
+const VIEW_STORAGE_KEY_PREFIX = "property_view_";
+
+const getLastViewKey = (userId: string, propertyId: string) =>
+  `${VIEW_STORAGE_KEY_PREFIX}${userId}_${propertyId}`;
+
+// Optional: Clean up old view timestamps (run occasionally)
+export const cleanupOldViewTimestamps = async () => {
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const viewKeys = allKeys.filter((key) =>
+      key.startsWith(VIEW_STORAGE_KEY_PREFIX),
+    );
+    const now = Date.now();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000; // Keep data for 7 days max
+    let deletedCount = 0;
+
+    for (const key of viewKeys) {
+      const timestamp = await AsyncStorage.getItem(key);
+      if (timestamp && now - parseInt(timestamp) > sevenDays) {
+        await AsyncStorage.removeItem(key);
+        deletedCount++;
+      }
+    }
+
+    if (deletedCount > 0) {
+      console.log(`🧹 Cleaned up ${deletedCount} old view timestamps`);
+    }
+  } catch (error) {
+    console.error("Error cleaning up view timestamps:", error);
+  }
+};
+
+export const incrementPropertyViews = async (
+  propertyId: string,
+  userId?: string,
+) => {
+  try {
+    // Don't count views for own properties (optional)
+    // if (isOwnProperty) return;
+
+    // Handle anonymous users (still count but can't track 24h window)
+    if (!userId) {
+      const property = await databases.getDocument(
+        config.databaseId!,
+        config.propertiesCollectionId!,
+        propertyId,
+      );
+      const currentViews = property.views || 0;
+      await databases.updateDocument(
+        config.databaseId!,
+        config.propertiesCollectionId!,
+        propertyId,
+        { views: currentViews + 1 },
+      );
+      console.log(`✅ Anonymous view counted for property ${propertyId}`);
+      return;
+    }
+
+    const lastViewKey = getLastViewKey(userId, propertyId);
+    const lastViewTimestamp = await AsyncStorage.getItem(lastViewKey);
+    const now = Date.now();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+
+    // Check if this is a new view (not within 24 hours)
+    const shouldCountView =
+      !lastViewTimestamp ||
+      now - parseInt(lastViewTimestamp) >= twentyFourHours;
+
+    if (shouldCountView) {
+      // Get current property data
+      const property = await databases.getDocument(
+        config.databaseId!,
+        config.propertiesCollectionId!,
+        propertyId,
+      );
+
+      const currentViews = property.views || 0;
+      const newViewCount = currentViews + 1;
+
+      // Update view count in database
+      await databases.updateDocument(
+        config.databaseId!,
+        config.propertiesCollectionId!,
+        propertyId,
+        { views: newViewCount },
+      );
+
+      // Store the timestamp of this view
+      await AsyncStorage.setItem(lastViewKey, now.toString());
+
+      // Optional: Update local state if needed
+      // store.updatePropertyViews(propertyId, newViewCount);
+
+      console.log(
+        `✅ View counted for property ${propertyId} by user ${userId}. New total: ${newViewCount}`,
+      );
+    } else {
+      // Don't count this view
+      const timeElapsed = now - parseInt(lastViewTimestamp!);
+      const hoursElapsed = (timeElapsed / (60 * 60 * 1000)).toFixed(1);
+      const hoursRemaining = (
+        (twentyFourHours - timeElapsed) /
+        (60 * 60 * 1000)
+      ).toFixed(1);
+
+      console.log(
+        `⏸️ View not counted for property ${propertyId} - Last view: ${hoursElapsed}h ago. ${hoursRemaining}h remaining`,
+      );
+    }
+  } catch (error) {
+    console.error("Error incrementing views:", error);
+  }
+};
+
+// Optional: Function to get remaining time until next view will count
+export const getTimeUntilNextViewCount = async (
+  propertyId: string,
+  userId: string,
+): Promise<number | null> => {
+  try {
+    if (!userId) return null;
+
+    const lastViewKey = getLastViewKey(userId, propertyId);
+    const lastViewTimestamp = await AsyncStorage.getItem(lastViewKey);
+
+    if (!lastViewTimestamp) return 0; // Can view now
+
+    const now = Date.now();
+    const lastView = parseInt(lastViewTimestamp);
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    const timeElapsed = now - lastView;
+
+    if (timeElapsed >= twentyFourHours) return 0; // Can view now
+
+    return twentyFourHours - timeElapsed; // Milliseconds until next view counts
+  } catch (error) {
+    console.error("Error getting time until next view:", error);
+    return null;
+  }
+};
+
+// Price filter options
+export type PriceRange = {
+  min: number;
+  max: number;
+  label: string;
+};
+
+export const PRICE_RANGES: PriceRange[] = [
+  { min: 0, max: 100, label: "Under $100" },
+  { min: 100, max: 200, label: "$100 - $200" },
+  { min: 200, max: 300, label: "$200 - $300" },
+  { min: 300, max: 400, label: "$300 - $400" },
+  { min: 400, max: 500, label: "$400 - $500" },
+  { min: 500, max: 600, label: "$500 - $600" },
+  { min: 600, max: 700, label: "$600 - $700" },
+  { min: 700, max: 800, label: "$700 - $800" },
+  { min: 800, max: 900, label: "$800 - $900" },
+  { min: 900, max: 1000, label: "$900 - $1000" },
+  { min: 1000, max: 1500, label: "$1000 - $1500" },
+  { min: 1500, max: 2000, label: "$1500 - $2000" },
+  { min: 2000, max: 3000, label: "$2000 - $3000" },
+  { min: 3000, max: 5000, label: "$3000 - $5000" },
+  { min: 5000, max: 10000, label: "$5000+" },
+];
+
+// Custom price ranges
+export interface CustomPriceRange {
+  min: number;
+  max: number;
+}
+
+// Get properties with price filter
+export async function getPropertiesWithPriceFilter({
+  filter,
+  query,
+  limit,
+  priceRange,
+  customPrice,
+}: {
+  filter: string;
+  query: string;
+  limit?: number;
+  priceRange?: PriceRange;
+  customPrice?: CustomPriceRange;
+}) {
+  try {
+    const buildQuery = [Query.orderDesc("$createdAt")];
+
+    // Add price filter
+    if (priceRange) {
+      if (priceRange.max === 10000) {
+        // For "$5000+" - only min price
+        buildQuery.push(Query.greaterThanEqual("price", priceRange.min));
+      } else {
+        // Normal range
+        buildQuery.push(Query.between("price", priceRange.min, priceRange.max));
+      }
+    } else if (customPrice) {
+      buildQuery.push(Query.between("price", customPrice.min, customPrice.max));
+    }
+
+    // Add text search
+    if (query && query.trim() !== "") {
+      const searchTerm = query.trim();
+      const isNumericSearch = /^\d+$/.test(searchTerm);
+
+      if (isNumericSearch) {
+        const priceNum = parseInt(searchTerm);
+        buildQuery.push(
+          Query.or([
+            Query.equal("price", priceNum),
+            Query.between("price", priceNum - 50, priceNum + 50),
+          ]),
+        );
+        buildQuery.push(
+          Query.or([
+            Query.search("propertyName", searchTerm),
+            Query.search("facilities", searchTerm),
+            Query.search("description", searchTerm),
+            Query.search("address", searchTerm),
+            Query.search("type", searchTerm),
+          ]),
+        );
+      } else {
+        buildQuery.push(
+          Query.or([
+            Query.search("propertyName", searchTerm),
+            Query.search("facilities", searchTerm),
+            Query.search("description", searchTerm),
+            Query.search("address", searchTerm),
+            Query.search("type", searchTerm),
+          ]),
+        );
+      }
+    }
+
+    // Add type filter
+    if (filter && filter !== "All") {
+      buildQuery.push(Query.equal("type", filter));
+    }
+
+    // Add limit
+    const fetchLimit = query && query.trim() !== "" ? 50 : limit || 10;
+    buildQuery.push(Query.limit(fetchLimit));
+
+    const result = await databases.listDocuments(
+      config.databaseId!,
+      config.propertiesCollectionId!,
+      buildQuery,
+    );
+
+    // Process properties with details
+    let propertiesWithDetails = await Promise.all(
+      result.documents.map(async (property) => {
+        // Agent - Fetch from USERS collection
+        if (property.agent) {
+          try {
+            const agent = await databases.getDocument(
+              config.databaseId!,
+              config.usersCollectionId!,
+              property.agent,
+            );
+            property.agent = agent;
+          } catch (error) {
+            property.agent = null;
+          }
+        }
+
+        // Calculate rating from reviews
+        if (property.reviews) {
+          try {
+            const parsedReviews = JSON.parse(property.reviews);
+            if (parsedReviews.length > 0) {
+              const sum = parsedReviews.reduce(
+                (acc: number, r: any) => acc + (r.rating || 0),
+                0,
+              );
+              property.rating = Number((sum / parsedReviews.length).toFixed(1));
+            } else {
+              property.rating = 0;
+            }
+          } catch (e) {
+            property.rating = 0;
+          }
+        } else {
+          property.rating = 0;
+        }
+
+        return property;
+      }),
+    );
+
+    return propertiesWithDetails;
+  } catch (error) {
+    console.error("Error in getPropertiesWithPriceFilter:", error);
+    return [];
+  }
+}
+
+// Get price statistics for properties
+export async function getPriceStats() {
+  try {
+    const result = await databases.listDocuments(
+      config.databaseId!,
+      config.propertiesCollectionId!,
+      [Query.limit(1000)],
+    );
+
+    const prices = result.documents.map((p) => p.price).filter((p) => p > 0);
+
+    if (prices.length === 0) return null;
+
+    return {
+      min: Math.min(...prices),
+      max: Math.max(...prices),
+      average: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length),
+      median: prices.sort((a, b) => a - b)[Math.floor(prices.length / 2)],
+    };
+  } catch (error) {
+    console.error("Error getting price stats:", error);
+    return null;
+  }
+}
+
+// roommate matching system
+
+export interface MatchProfile {
+  $id: string;
+  userId: string;
+  userType: "student" | "tenant" | "professional";
+  name: string;
+  email: string;
+  phone: string;
+  avatar?: string;
+  role: string;
+  gender: "male" | "female";
+  preferredGender: "male" | "female";
+  budget: number;
+  preferredLocation: string;
+  preferredRoommateType: string;
+  lifestyle: string;
+  about: string;
+  moveInDate: string;
+  lookingFor: string;
+  isActive: boolean;
+}
+
+export const createMatchProfile = async (
+  profile: Omit<MatchProfile, "$id" | "createdAt">,
+) => {
+  try {
+    const result = await databases.createDocument(
+      config.databaseId!,
+      config.matchProfilesCollectionId!,
+      ID.unique(),
+      {
+        ...profile,
+        lifestyle: Array.isArray(profile.lifestyle)
+          ? JSON.stringify(profile.lifestyle)
+          : profile.lifestyle,
+      },
+    );
+    return result;
+  } catch (error) {
+    console.error("Error creating match profile:", error);
+    throw error;
+  }
+};
+
+export const getMatchProfiles = async (filters?: {
+  location?: string;
+  myGender?: "male" | "female";
+  preferredGender?: "male" | "female";
+  myBudget?: number;
+}) => {
+  try {
+    // Server-side: only active profiles + location
+    const queries: any[] = [Query.equal("isActive", true)];
+
+    if (filters?.location) {
+      queries.push(Query.search("preferredLocation", filters.location));
+    }
+
+    const result = await databases.listDocuments(
+      config.databaseId!,
+      config.matchProfilesCollectionId!,
+      queries,
+    );
+
+    let profiles = result.documents.map((doc) => ({
+      ...doc,
+      lifestyle: doc.lifestyle
+        ? (() => {
+            try {
+              return JSON.parse(doc.lifestyle);
+            } catch {
+              // fallback for old comma-separated format
+              return doc.lifestyle.split(", ").filter(Boolean);
+            }
+          })()
+        : [],
+    }));
+
+    // Client-side: mutual gender compatibility
+    if (filters?.myGender || filters?.preferredGender) {
+      profiles = profiles.filter((p) => {
+        const profile = p as unknown as MatchProfile;
+
+        const theyWantMe =
+          !filters.myGender ||
+          profile.preferredGender === filters.myGender ||
+          (profile.preferredGender as any) === "any";
+
+        const iWantThem =
+          !filters.preferredGender ||
+          filters.preferredGender === profile.gender ||
+          filters.preferredGender === ("any" as any);
+
+        return theyWantMe && iWantThem;
+      });
+    }
+
+    // Client-side: budget within 50% of each other
+    if (filters?.myBudget) {
+      profiles = profiles.filter((p) => {
+        const profile = p as unknown as MatchProfile;
+        if (!profile.budget) return false;
+        const higher = Math.max(profile.budget, filters.myBudget!);
+        const lower = Math.min(profile.budget, filters.myBudget!);
+        return higher / lower <= 1.5;
+      });
+    }
+
+    return profiles;
+  } catch (error) {
+    console.error("Error fetching match profiles:", error);
+    return [];
+  }
+};
+
+export const getUserMatchProfile = async (userId: string) => {
+  try {
+    const result = await databases.listDocuments(
+      config.databaseId!,
+      config.matchProfilesCollectionId!,
+      [Query.equal("userId", userId)],
+    );
+    return result.documents[0] || null;
+  } catch (error) {
+    console.error("Error fetching user match profile:", error);
+    return null;
+  }
+};
+
+export const updateMatchProfile = async (
+  profileId: string,
+  updates: Partial<MatchProfile>,
+) => {
+  try {
+    const sanitized = {
+      ...updates,
+      ...(updates.lifestyle && Array.isArray(updates.lifestyle)
+        ? { lifestyle: JSON.stringify(updates.lifestyle) }
+        : {}),
+    };
+    const result = await databases.updateDocument(
+      config.databaseId!,
+      config.matchProfilesCollectionId!,
+      profileId,
+      sanitized,
+    );
+    return result;
+  } catch (error) {
+    console.error("Error updating match profile:", error);
+    throw error;
+  }
+};
+
+export const deleteMatchProfile = async (profileId: string) => {
+  try {
+    await databases.deleteDocument(
+      config.databaseId!,
+      config.matchProfilesCollectionId!,
+      profileId,
+    );
+    return true;
+  } catch (error) {
+    console.error("Error deleting match profile:", error);
+    return false;
   }
 };

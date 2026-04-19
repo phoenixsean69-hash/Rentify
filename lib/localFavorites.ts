@@ -1,7 +1,7 @@
 // lib/localFavorites.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const FAVORITES_KEY = "user_favorites";
+const FAVORITES_KEY = "@rentify:favorites";
 
 export interface FavoriteProperty {
   $id: string;
@@ -13,6 +13,11 @@ export interface FavoriteProperty {
   image2?: string;
   image3?: string;
   rating?: number;
+  creatorId?: string;
+  creatorName?: string;
+  creatorEmail?: string;
+  creatorPhone?: string;
+  creatorAvatar?: string;
 }
 
 // Get all favorites from local storage

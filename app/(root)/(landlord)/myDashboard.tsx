@@ -99,8 +99,8 @@ export default function LandlordDashboard() {
     (p) => p.isAvailable === true,
   ).length;
   const occupancyRate =
-    stats.totalProperties > 0
-      ? (availableProperties / stats.totalProperties) * 100
+    properties.length > 0
+      ? ((properties.length - availableProperties) / properties.length) * 100
       : 0;
 
   // Get top performing property

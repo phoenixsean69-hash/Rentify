@@ -17,23 +17,29 @@ const TabIcon = ({
   focused: boolean;
   icon: ImageSourcePropType;
   title: string;
-}) => (
-  <View className="flex-1 mt-3 flex flex-col items-center">
-    <Image
-      source={icon}
-      tintColor={focused ? "#ff7b00" : "#FFFFFF"}
-      resizeMode="contain"
-      className="size-6"
-    />
-    <Text
-      className={`${
-        focused ? "text-[#ff8400] font-rubik-medium" : "text-white font-rubik"
-      } text-xs w-full text-center mt-1`}
-    >
-      {title}
-    </Text>
-  </View>
-);
+}) => {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
+
+  return (
+    <View className="flex-1 mt-2 flex flex-col items-center">
+      <Image
+        source={icon}
+        tintColor={focused ? "#F97316" : theme.muted}
+        resizeMode="contain"
+        className="size-6"
+      />
+      <Text
+        className={`text-xs w-full text-center mt-0 ${
+          focused ? "font-rubik-medium" : "font-rubik"
+        }`}
+        style={{ color: focused ? "#F97316" : theme.text }}
+      >
+        {title}
+      </Text>
+    </View>
+  );
+};
 
 const TabsLayout = () => {
   const colorScheme = useColorScheme();
@@ -49,7 +55,9 @@ const TabsLayout = () => {
           position: "absolute",
           borderTopColor: "#0061FF1A",
           borderTopWidth: 2,
-          minHeight: 70,
+          minHeight: 80,
+          paddingTop: 0,
+          paddingBottom: 10,
         },
       }}
     >
@@ -65,11 +73,42 @@ const TabsLayout = () => {
       />
 
       <Tabs.Screen
-        name="addProperty"
+        name="myDetailsEdit"
         options={{
-          title: "Profile",
+          title: "Change Details",
           headerShown: false,
           href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
+      <Tabs.Screen
+        name="landAbout"
+        options={{
+          title: "About",
+          headerShown: false,
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
+      <Tabs.Screen
+        name="landNotifications"
+        options={{
+          title: "Change Details",
+          headerShown: false,
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
+      <Tabs.Screen
+        name="addProperty"
+        options={{
+          title: "Add Property",
+          headerShown: false,
+          href: null,
+          tabBarStyle: { display: "none" },
         }}
       />
 

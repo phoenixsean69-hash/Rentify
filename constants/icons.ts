@@ -63,6 +63,16 @@ import student from "@/assets/icons/student.png";
 import sun from "@/assets/icons/sun.png";
 import swim from "@/assets/icons/swim.png";
 import borehole from "@/assets/icons/tank.png";
+import apartment from "@/assets/icons/apartment.png";
+import cottage from "@/assets/icons/cottage.png";
+import duplex from "@/assets/icons/duplex.png";
+import luxury from "@/assets/icons/luxury.png";
+import studio from "@/assets/icons/studio.png";
+import land from "@/assets/icons/land.png";
+import workplace from "@/assets/icons/workplace.png";
+import other from "@/assets/icons/other.png";
+import boarding from "@/assets/icons/students.png";
+
 import tenant from "@/assets/icons/tenant.png";
 import tiled from "@/assets/icons/tiles.png";
 import eye from "@/assets/icons/visibility.png";
@@ -71,6 +81,15 @@ import wallet from "@/assets/icons/wallet.png";
 import wifi from "@/assets/icons/wifi.png";
 
 export default {
+  apartment,
+  boarding,
+  cottage,
+  duplex,
+  land,
+  luxury,
+  other,
+  studio,
+  workplace,
   inbox,
   close,
   github,

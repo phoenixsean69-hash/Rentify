@@ -3,14 +3,17 @@ import useAuthStore from "@/store/auth.store";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Alert,
+  findNodeHandle,
   Linking,
   Modal,
+  Platform,
   ScrollView,
   Text,
   TouchableOpacity,
+  UIManager,
   useColorScheme,
   View,
 } from "react-native";
@@ -19,26 +22,32 @@ import { SafeAreaView } from "react-native-safe-area-context";
 // Import the AI Chat component
 import AIChatModal from "@/components/chat-support";
 
+// Enable LayoutAnimation for Android
+if (Platform.OS === "android") {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
+
 export default function Help() {
   const { user } = useAuthStore();
-  const [copied, setCopied] = useState(false);
   const [chatModalVisible, setChatModalVisible] = useState(false);
   const [faqModalVisible, setFaqModalVisible] = useState(false);
+  const [expandedFaqs, setExpandedFaqs] = useState<Set<number>>(new Set());
+  const [highlightCategory, setHighlightCategory] = useState<string | null>(
+    null,
+  );
+  const scrollViewRef = useRef<ScrollView>(null);
+  const categoryRefs = useRef<Record<string, View | null>>({});
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
 
-  const isLandlord = user?.userMode === "landlord";
-
   const handleBackPress = () => {
-    if (isLandlord) {
-      router.push("/landProfile");
-    } else {
-      router.push("/profile");
-    }
+    router.push("/profile");
   };
 
   const handleEmailPress = async () => {
-    await Linking.openURL("mailto:support@rentify.com");
+    await Linking.openURL("mailto:support@nookly.com");
   };
 
   const handleCallPress = () => {
@@ -60,90 +69,190 @@ export default function Help() {
     );
   };
 
+  const toggleExpand = (faqId: number) => {
+    const newExpanded = new Set(expandedFaqs);
+    if (newExpanded.has(faqId)) {
+      newExpanded.delete(faqId);
+    } else {
+      newExpanded.add(faqId);
+    }
+    setExpandedFaqs(newExpanded);
+  };
+
+  const openFaqModalWithHighlight = (category: string) => {
+    setHighlightCategory(category);
+    setFaqModalVisible(true);
+
+    // Scroll to the category after modal is rendered
+    setTimeout(() => {
+      if (categoryRefs.current[category]) {
+        const nodeHandle = findNodeHandle(categoryRefs.current[category]);
+        if (nodeHandle && scrollViewRef.current) {
+          scrollViewRef.current.scrollTo({ y: 0, animated: true });
+          // Use measure to get position
+          categoryRefs.current[category]?.measureLayout(
+            findNodeHandle(scrollViewRef.current),
+            (x, y) => {
+              scrollViewRef.current?.scrollTo({ y: y - 100, animated: true });
+            },
+            () => {},
+          );
+        }
+      }
+    }, 300);
+  };
+
   const faqs = [
+    // Finding Properties
     {
       id: 1,
-      question: "How do I list a property?",
-      answer:
-        "Go to your profile, tap on 'My Properties', then click the '+' button to add a new property. Fill in all details (address, price, bedrooms, bathrooms, amenities), upload photos (up to 10), and publish. Your listing will be visible within minutes!",
-      category: "Properties",
-    },
-    {
-      id: 2,
       question: "How do I find properties to rent?",
       answer:
         "Use the search bar on the home screen. You can filter by location, price range, property type, number of bedrooms, and amenities. Sort by newest, price, or popularity to find your perfect home. Save your searches to get notified when new properties match your criteria!",
-      category: "Properties",
+      category: "Finding Properties",
     },
     {
-      id: 3,
+      id: 2,
       question: "How do I save favorite properties?",
       answer:
         "Tap the heart icon on any property card to save it to your favorites. You can view all saved properties in the 'My Favorites' section. Favorites sync across all your devices, and you'll get notified when the price drops on saved properties.",
-      category: "Properties",
+      category: "Finding Properties",
     },
     {
-      id: 4,
+      id: 3,
       question: "How do I contact a landlord?",
       answer:
         "Open any property listing and tap the 'Contact Landlord' button. You can send a message directly through the app. Landlords typically respond within 24 hours. Be specific about your interest, mention your move-in date, and ask about availability for a better response.",
-      category: "Properties",
+      category: "Finding Properties",
     },
     {
+      id: 4,
+      question: "What should I ask before viewing a property?",
+      answer:
+        "Key questions to ask: Is the property still available? What's included in rent (water, electricity, WiFi)? Is parking available? What's the neighborhood like? Are pets allowed? How long is the lease? What's the deposit amount? When can I view the property?",
+      category: "Finding Properties",
+    },
+
+    // Student-Specific Content
+    {
       id: 5,
+      question: "🎓 How do I find student accommodation?",
+      answer:
+        "To find student-friendly properties: 1) Use the 'Student Housing' filter in search, 2) Look for 'Boarding' property type, 3) Check areas near universities (Milton Park, Mount Pleasant, campus areas), 4) Filter by price range ($150-400/month), 5) Look for keywords like 'students welcome', 'near campus', 'shared facilities'. Many landlords offer special student rates and flexible lease terms!",
+      category: "Student Tips",
+    },
+    {
+      id: 6,
+      question: "🎓 What should students look for in a rental?",
+      answer:
+        "As a student, prioritize: ✅ Proximity to campus/public transport ✅ Affordable rent ($150-400/month) ✅ Utilities included or clearly stated ✅ Safe neighborhood ✅ Study-friendly environment ✅ Reliable WiFi ✅ Flexible lease terms (per semester) ✅ Furnished room (bed, desk, chair) ✅ Shared kitchen/living space ✅ Good security (locks, burglar bars). Always view the property before paying any deposit!",
+      category: "Student Tips",
+    },
+    {
+      id: 7,
+      question: "🎓 Can I rent with friends/roommates?",
+      answer:
+        "Yes! Many properties accept multiple tenants. Tips for group renting: 1) Look for 'shared accommodation' or 'student house', 2) Ensure everyone is on the lease, 3) Discuss budget and expectations beforehand, 4) Designate who contacts landlord, 5) Split utilities fairly, 6) Have a roommate agreement for chores/guests. Boarding houses often have individual room rentals with shared common areas.",
+      category: "Student Tips",
+    },
+    {
+      id: 8,
+      question: "🎓 What documents do students need to rent?",
+      answer:
+        "Students typically need: 📄 Student ID or acceptance letter 📄 Proof of enrollment 📄 Guarantor/Parent information (if no income) 📄 References (previous landlord or character) 📄 Deposit (usually 1 month rent) 📄 Valid ID/Passport. Some landlords may also request a co-signer for first-time renters.",
+      category: "Student Tips",
+    },
+    {
+      id: 9,
+      question: "🎓 Are there student discounts?",
+      answer:
+        "Yes! Many landlords offer student discounts: 🎓 5-10% off rent with valid student ID 🎓 Reduced deposit for students 🎓 Flexible payment terms 🎓 Shorter lease options (per semester). Always mention you're a student when contacting landlords - they may have special student rates not listed publicly!",
+      category: "Student Tips",
+    },
+
+    // Account Management
+    {
+      id: 10,
       question: "How do I update my profile?",
       answer:
         "Go to your profile page and tap on the edit icon near your avatar. You can update your name, phone number, email address, and profile picture. Changes are saved automatically and synced across all your devices.",
       category: "Account",
     },
     {
-      id: 6,
+      id: 11,
       question: "How do I change my password?",
       answer:
         "Go to Settings from your profile, then select 'Change Password'. Enter your current password and new password to update. Make sure to use a strong password with at least 8 characters, including numbers and special characters for better security.",
       category: "Account",
     },
     {
-      id: 7,
+      id: 12,
       question: "How do I delete my account?",
       answer:
-        "To delete your account, go to Settings → Account → Delete Account. Please note that this action is permanent and cannot be undone. All your listings, favorites, and messages will be permanently removed.",
+        "To delete your account, go to Settings → Account → Delete Account. Please note that this action is permanent and cannot be undone. All your favorites and messages will be permanently removed.",
       category: "Account",
     },
+
+    // Safety
     {
-      id: 8,
-      question: "How do I report a suspicious listing?",
+      id: 13,
+      question: "How do I spot a scam listing?",
       answer:
-        "If you encounter a suspicious listing, tap the three dots menu on the property page and select 'Report'. Our team will review it within 24 hours. You can also email us at safety@rentify.com with the property link and details.",
+        "🚩 Red flags to watch for: ❌ Price too good to be true ❌ Landlord won't show property ❌ Requests deposit before viewing ❌ Poor quality or stolen photos ❌ Vague descriptions ❌ Pressure to pay immediately ❌ Only accepts wire transfer/crypto. Always verify the property exists, view in person, and never pay before signing a lease!",
       category: "Safety",
     },
     {
-      id: 9,
-      question: "Is Rentify free to use?",
+      id: 14,
+      question: "How do I report a suspicious listing?",
       answer:
-        "Yes! Rentify is 100% free for both tenants and landlords. We don't charge any listing fees, commission, or subscription fees. Premium features like featured listings and analytics will be available soon.",
+        "If you encounter a suspicious listing, tap the three dots menu on the property page and select 'Report'. Our team will review it within 24 hours. You can also email us at support@nookly.com with the property link and details. Your safety is our priority!",
+      category: "Safety",
+    },
+    {
+      id: 15,
+      question: "Safe viewing tips for students?",
+      answer:
+        "📌 Stay safe during viewings: • Bring a friend/roommate • Tell someone where you're going • Meet during daylight • Trust your instincts • Don't go alone to isolated properties • Take photos/videos • Ask lots of questions • Never carry large amounts of cash. Report anything suspicious immediately!",
+      category: "Safety",
+    },
+
+    // Payments & Pricing
+    {
+      id: 16,
+      question: "Is Nookly free to use?",
+      answer:
+        "Yes! Nookly is 100% free for tenants. We don't charge any fees for searching, contacting landlords, or saving favorites. You'll never pay to use our platform - it's completely free to find your perfect home!",
       category: "Pricing",
     },
     {
-      id: 10,
+      id: 17,
+      question: "What should I know about deposits?",
+      answer:
+        "💰 Deposit tips: • Usually 1-2 months rent • Get a written receipt • Document property condition before moving in (photos/videos) • Understand return conditions • Ask about deductions • Get deposit return timeline in writing. Never pay deposit before viewing and signing a lease!",
+      category: "Payments",
+    },
+    {
+      id: 18,
+      question: "What utilities are typically included?",
+      answer:
+        "Common inclusions: 🏠 Sometimes included: Water, refuse collection, security 🏠 Often separate: Electricity (prepaid), WiFi, parking 🏠 Ask about: Generator/backup power, borehole water, internet options. Always clarify what's included BEFORE signing the lease to avoid surprises!",
+      category: "Payments",
+    },
+
+    // Notifications & Settings
+    {
+      id: 19,
       question: "How do I enable notifications?",
       answer:
-        "To enable notifications, go to your device Settings → Apps → Rentify → Notifications → Toggle ON. In the app, you can customize what notifications you receive in Settings → Notifications Preferences.",
+        "To enable notifications: 1) Go to your device Settings → Apps → Nookly → Notifications → Toggle ON, 2) In the app, go to Settings → Notifications Preferences to customize what you receive (new listings, price drops, messages). Enable notifications to never miss your dream home!",
       category: "Settings",
     },
     {
-      id: 11,
-      question: "How do I edit or remove a property listing?",
+      id: 20,
+      question: "How do I get alerts for new properties?",
       answer:
-        "Go to your profile → My Properties, tap on the property you want to edit, then tap the edit icon. You can update details, add or remove photos, change pricing, or mark it as rented. To remove, tap the delete icon.",
-      category: "Properties",
-    },
-    {
-      id: 12,
-      question: "What payment methods are accepted?",
-      answer:
-        "Rentify is currently free to use. When premium features launch, we'll accept credit/debit cards, PayPal, and mobile money. All payments are processed securely through our payment partners.",
-      category: "Pricing",
+        "Set up saved searches: 1) Perform a search with your criteria (location, price, type), 2) Tap 'Save Search', 3) Toggle notifications ON. You'll get instant alerts when new properties match your preferences! Perfect for finding great deals before others.",
+      category: "Settings",
     },
   ];
 
@@ -152,7 +261,7 @@ export default function Help() {
       icon: "mail-outline",
       title: "Email Support",
       description: "Get response within 24 hours",
-      value: "support@rentify.com",
+      value: "support@nookly.com",
       onPress: handleEmailPress,
       color: "#3B82F6",
     },
@@ -160,7 +269,7 @@ export default function Help() {
       icon: "call-outline",
       title: "Phone Support",
       description: "Mon-Fri, 9 AM - 6 PM",
-      value: " Tap to see contact numbers",
+      value: "Tap to see contact numbers",
       onPress: handleCallPress,
       color: "#10B981",
     },
@@ -186,39 +295,49 @@ export default function Help() {
     {} as Record<string, typeof faqs>,
   );
 
-  const renderFAQItem = (faq: (typeof faqs)[0]) => (
-    <TouchableOpacity
-      key={faq.id}
-      className="p-4 rounded-2xl mb-3"
-      style={{
-        backgroundColor: theme.surface,
-        borderWidth: 1,
-        borderColor: theme.muted + "30",
-      }}
-      onPress={() => {}}
-    >
-      <View className="flex-row items-start">
-        <View className="w-6 h-6 rounded-full items-center justify-center mr-3 mt-0.5">
-          <Ionicons name="help-circle" size={20} color={theme.primary[300]} />
+  const renderFAQItem = (faq: (typeof faqs)[0]) => {
+    const isExpanded = expandedFaqs.has(faq.id);
+
+    return (
+      <TouchableOpacity
+        key={faq.id}
+        className="p-4 rounded-2xl mb-3"
+        style={{
+          backgroundColor: theme.surface,
+          borderWidth: 1,
+          borderColor: theme.muted + "30",
+        }}
+        onPress={() => toggleExpand(faq.id)}
+        activeOpacity={0.7}
+      >
+        <View className="flex-row items-start">
+          <View className="w-6 h-6 rounded-full items-center justify-center mr-3 mt-0.5">
+            <Ionicons
+              name={isExpanded ? "remove-circle" : "add-circle"}
+              size={20}
+              color={theme.primary[300]}
+            />
+          </View>
+          <View className="flex-1">
+            <Text
+              className="text-base font-rubik-medium mb-1"
+              style={{ color: theme.text }}
+            >
+              {faq.question}
+            </Text>
+            {isExpanded && (
+              <Text
+                className="text-sm leading-5 mt-2"
+                style={{ color: theme.muted }}
+              >
+                {faq.answer}
+              </Text>
+            )}
+          </View>
         </View>
-        <View className="flex-1">
-          <Text
-            className="text-base font-rubik-medium mb-1"
-            style={{ color: theme.text }}
-          >
-            {faq.question}
-          </Text>
-          <Text
-            className="text-sm"
-            style={{ color: theme.muted }}
-            numberOfLines={2}
-          >
-            {faq.answer}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView
@@ -278,7 +397,36 @@ export default function Help() {
           </View>
         </LinearGradient>
 
-        {/* Quick Stats - Redesigned */}
+        {/* Student Special Section */}
+        <View className="mx-4 mt-6">
+          <LinearGradient
+            colors={["#8B5CF6", "#6D28D9"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            className="p-5 rounded-2xl"
+          >
+            <View className="flex-row items-center mb-2">
+              <Ionicons name="school-outline" size={28} color="#fff" />
+              <Text className="text-white text-xl font-rubik-bold ml-2">
+                Student Hub 🎓
+              </Text>
+            </View>
+            <Text className="text-white/90 text-sm mb-3">
+              Need help finding student accommodation? Check out our
+              student-specific guides and tips!
+            </Text>
+            <TouchableOpacity
+              onPress={() => openFaqModalWithHighlight("Student Tips")}
+              className="bg-white/20 px-4 py-2 rounded-full self-start"
+            >
+              <Text className="text-white font-rubik-medium text-sm">
+                View Student Tips →
+              </Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+
+        {/* Quick Stats */}
         <View className="mx-4 mt-6">
           <Text
             className="text-lg font-rubik-bold mb-3"
@@ -287,7 +435,6 @@ export default function Help() {
             Quick Stats
           </Text>
           <View className="flex-row gap-3">
-            {/* Stat Card 1 */}
             <View
               className="flex-1 rounded-2xl overflow-hidden"
               style={{
@@ -325,7 +472,6 @@ export default function Help() {
               </LinearGradient>
             </View>
 
-            {/* Stat Card 2 */}
             <View
               className="flex-1 rounded-2xl overflow-hidden"
               style={{
@@ -363,7 +509,6 @@ export default function Help() {
               </View>
             </View>
 
-            {/* Stat Card 3 */}
             <View
               className="flex-1 rounded-2xl overflow-hidden"
               style={{
@@ -373,30 +518,30 @@ export default function Help() {
               }}
             >
               <LinearGradient
-                colors={[theme.danger + "10", theme.danger + "05"]}
+                colors={[theme.primary[300] + "10", theme.primary[300] + "05"]}
                 className="p-4 items-center"
               >
                 <View
                   className="w-12 h-12 rounded-full items-center justify-center mb-2"
-                  style={{ backgroundColor: theme.danger + "20" }}
+                  style={{ backgroundColor: theme.primary[300] + "20" }}
                 >
                   <Ionicons
-                    name="star-outline"
+                    name="people-outline"
                     size={24}
-                    color={theme.danger}
+                    color={theme.primary[300]}
                   />
                 </View>
                 <Text
                   className="text-2xl font-rubik-bold"
-                  style={{ color: theme.danger }}
+                  style={{ color: theme.primary[300] }}
                 >
-                  100%
+                  1000+
                 </Text>
                 <Text
                   className="text-xs text-center mt-1"
                   style={{ color: theme.muted }}
                 >
-                  Satisfaction Rate
+                  Happy Students
                 </Text>
               </LinearGradient>
             </View>
@@ -477,11 +622,11 @@ export default function Help() {
                 className="text-sm font-rubik-medium"
                 style={{ color: theme.primary[300] }}
               >
-                View All
+                View All ({faqs.length})
               </Text>
             </TouchableOpacity>
           </View>
-          <View className="gap-3">{faqs.slice(0, 3).map(renderFAQItem)}</View>
+          <View className="gap-3">{faqs.slice(0, 5).map(renderFAQItem)}</View>
         </View>
 
         {/* Report Issue Section */}
@@ -503,8 +648,8 @@ export default function Help() {
             </Text>
           </View>
           <Text className="text-sm mb-3" style={{ color: theme.muted }}>
-            Found a bug or have a complaint? Let us know and we&apos;ll fix it
-            immediately.
+            Found a bug, suspicious listing, or have a complaint? Let us know
+            and we'll fix it immediately.
           </Text>
           <TouchableOpacity
             className="py-2 px-4 rounded-xl self-start"
@@ -522,19 +667,21 @@ export default function Help() {
           className="text-center text-xs mt-6"
           style={{ color: theme.muted + "80" }}
         >
-          Version 1.0.0 • Terms of Service • Privacy Policy
+          Version 1.0.0 • For Tenants • Student-Friendly
         </Text>
       </ScrollView>
 
-      {/* FAQ Modal */}
+      {/* FAQ Modal with Highlight */}
       <Modal
         animationType="slide"
         transparent={false}
         visible={faqModalVisible}
-        onRequestClose={() => setFaqModalVisible(false)}
+        onRequestClose={() => {
+          setFaqModalVisible(false);
+          setHighlightCategory(null);
+        }}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-          {/* Modal Header */}
           <LinearGradient
             colors={[theme.primary[100], theme.background]}
             start={{ x: 0, y: 0 }}
@@ -542,10 +689,13 @@ export default function Help() {
             className="px-4 py-3 flex-row items-center"
           >
             <TouchableOpacity
-              onPress={() => setFaqModalVisible(false)}
+              onPress={() => {
+                setFaqModalVisible(false);
+                setHighlightCategory(null);
+              }}
               className="mr-3 p-1"
             >
-              <Ionicons name="close" size={24} color={theme.title} />
+              <Ionicons name="arrow-back" size={24} color={theme.title} />
             </TouchableOpacity>
             <View className="flex-1">
               <Text
@@ -555,38 +705,93 @@ export default function Help() {
                 All FAQs
               </Text>
               <Text className="text-xs" style={{ color: theme.muted }}>
-                {faqs.length} articles available
+                {faqs.length} articles • Tap to expand
               </Text>
             </View>
-            <TouchableOpacity onPress={() => setFaqModalVisible(false)}>
-              <Ionicons name="search-outline" size={24} color={theme.title} />
-            </TouchableOpacity>
           </LinearGradient>
 
           <ScrollView
+            ref={scrollViewRef}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
           >
-            {Object.entries(groupedFaqs).map(([category, categoryFaqs]) => (
-              <View key={category} className="mb-6">
-                <View className="flex-row items-center mb-3">
-                  <View
-                    className="w-1 h-6 rounded-full mr-2"
-                    style={{ backgroundColor: theme.primary[300] }}
-                  />
-                  <Text
-                    className="text-base font-rubik-bold"
-                    style={{ color: theme.title }}
-                  >
-                    {category}
-                  </Text>
-                  <Text className="text-xs ml-2" style={{ color: theme.muted }}>
-                    {categoryFaqs.length} articles
-                  </Text>
+            {Object.entries(groupedFaqs).map(([category, categoryFaqs]) => {
+              const isHighlighted = highlightCategory === category;
+
+              return (
+                <View
+                  key={category}
+                  className={`mb-6 ${isHighlighted ? "rounded-2xl overflow-hidden" : ""}`}
+                  ref={(ref) => {
+                    categoryRefs.current[category] = ref;
+                  }}
+                >
+                  {/* Highlight border and background for Student Tips */}
+                  {isHighlighted ? (
+                    <View
+                      className="rounded-2xl p-4"
+                      style={{
+                        backgroundColor: "#8B5CF6" + "10",
+                        borderWidth: 2,
+                        borderColor: "#8B5CF6",
+                        shadowColor: "#8B5CF6",
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 10,
+                        elevation: 5,
+                      }}
+                    >
+                      <View className="flex-row items-center mb-3">
+                        <View
+                          className="w-1 h-6 rounded-full mr-2"
+                          style={{ backgroundColor: "#8B5CF6" }}
+                        />
+                        <Text
+                          className="text-base font-rubik-bold"
+                          style={{ color: "#8B5CF6" }}
+                        >
+                          {category}
+                        </Text>
+                        <Text
+                          className="text-xs ml-2"
+                          style={{ color: theme.muted }}
+                        >
+                          {categoryFaqs.length} articles
+                        </Text>
+                        <View className="ml-2 bg-purple-500 px-2 py-0.5 rounded-full">
+                          <Text className="text-white text-xs font-rubik-medium">
+                            Featured
+                          </Text>
+                        </View>
+                      </View>
+                      {categoryFaqs.map(renderFAQItem)}
+                    </View>
+                  ) : (
+                    <>
+                      <View className="flex-row items-center mb-3">
+                        <View
+                          className="w-1 h-6 rounded-full mr-2"
+                          style={{ backgroundColor: theme.primary[300] }}
+                        />
+                        <Text
+                          className="text-base font-rubik-bold"
+                          style={{ color: theme.title }}
+                        >
+                          {category}
+                        </Text>
+                        <Text
+                          className="text-xs ml-2"
+                          style={{ color: theme.muted }}
+                        >
+                          {categoryFaqs.length} articles
+                        </Text>
+                      </View>
+                      {categoryFaqs.map(renderFAQItem)}
+                    </>
+                  )}
                 </View>
-                {categoryFaqs.map(renderFAQItem)}
-              </View>
-            ))}
+              );
+            })}
           </ScrollView>
         </SafeAreaView>
       </Modal>

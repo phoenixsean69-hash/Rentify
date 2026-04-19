@@ -2,7 +2,7 @@
 import { Colors } from "@/constants/Colors";
 import icons from "@/constants/icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -17,68 +17,93 @@ interface PopularLocationsProps {
   limit?: number;
 }
 
-// Simple cache for popular locations
+// Module-level cache (persists across component instances)
 let cachedLocations: PopularLocation[] | null = null;
 let lastFetchTime = 0;
-const CACHE_TTL = 300000; // 5 minutes for locations (they don't change often)
+let isFetching = false; // Module-level fetch lock
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const PopularLocations = ({ limit = 4 }: PopularLocationsProps) => {
   const router = useRouter();
-  const [locations, setLocations] = useState<PopularLocation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [locations, setLocations] = useState<PopularLocation[]>(
+    cachedLocations || [],
+  );
+  const [loading, setLoading] = useState(!cachedLocations);
   const [error, setError] = useState<string | null>(null);
   const isMounted = useRef(true);
 
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
 
-  const loadPopularLocations = useCallback(async () => {
-    try {
-      // Check cache first
-      const now = Date.now();
-      if (cachedLocations && now - lastFetchTime < CACHE_TTL) {
-        console.log("📦 Using cached popular locations");
-        if (isMounted.current) {
-          setLocations(cachedLocations);
-          setLoading(false);
-        }
-        return;
-      }
+  useEffect(() => {
+    // Set initial locations from cache immediately
+    if (cachedLocations) {
+      setLocations(cachedLocations);
+      setLoading(false);
+    }
 
-      console.log("🌐 Fetching fresh popular locations");
-      setLoading(true);
-      setError(null);
+    // Only fetch if cache is expired or doesn't exist
+    const now = Date.now();
+    const cacheExpired = !cachedLocations || now - lastFetchTime >= CACHE_TTL;
+
+    if (cacheExpired && !isFetching) {
+      loadPopularLocations();
+    }
+
+    return () => {
+      isMounted.current = false;
+    };
+  }, []); // Empty dependency array - runs once
+
+  const loadPopularLocations = async () => {
+    // Prevent multiple simultaneous fetches
+    if (isFetching) return;
+
+    isFetching = true;
+
+    // Double-check cache again (in case it was populated while waiting)
+    const now = Date.now();
+    if (cachedLocations && now - lastFetchTime < CACHE_TTL) {
+      console.log("📦 Cache populated during wait, using cached data");
+      if (isMounted.current) {
+        setLocations(cachedLocations);
+        setLoading(false);
+      }
+      isFetching = false;
+      return;
+    }
+
+    console.log("🌐 Fetching fresh popular locations (once only)");
+
+    try {
+      if (isMounted.current) {
+        setLoading(true);
+        setError(null);
+      }
 
       const data = await locationService.getPopularLocations(limit);
 
       if (isMounted.current) {
         setLocations(data);
-        // Update cache
+        // Update module-level cache
         cachedLocations = data;
         lastFetchTime = Date.now();
       }
     } catch (err) {
       console.error("Failed to load locations:", err);
-      // Use cached data if available
-      if (cachedLocations && isMounted.current) {
-        setLocations(cachedLocations);
-      } else if (isMounted.current) {
+      if (isMounted.current && !cachedLocations) {
         setError("Could not load locations");
+      } else if (isMounted.current && cachedLocations) {
+        // Use cached data if available
+        setLocations(cachedLocations);
       }
     } finally {
       if (isMounted.current) {
         setLoading(false);
       }
+      isFetching = false;
     }
-  }, [limit]);
-
-  useEffect(() => {
-    loadPopularLocations();
-
-    return () => {
-      isMounted.current = false;
-    };
-  }, [loadPopularLocations]);
+  };
 
   const handleLocationPress = (location: PopularLocation) => {
     router.push({
@@ -91,20 +116,32 @@ const PopularLocations = ({ limit = 4 }: PopularLocationsProps) => {
     router.push("/all-locations" as any);
   };
 
-  if (loading) {
+  // Manual retry
+  const handleRetry = () => {
+    // Reset cache to force fresh fetch
+    cachedLocations = null;
+    lastFetchTime = 0;
+    loadPopularLocations();
+  };
+
+  if (loading && !cachedLocations) {
     return (
       <View className="py-8 items-center justify-center">
-        <ActivityIndicator size="large" color={theme.title} />
-        <Text className="text-gray-500 mt-2">Loading popular locations...</Text>
+        <ActivityIndicator size="large" color={theme.primary[300]} />
+        <Text className="text-gray-500 mt-2" style={{ color: theme.muted }}>
+          Loading popular locations...
+        </Text>
       </View>
     );
   }
 
-  if (error) {
+  if (error && !cachedLocations) {
     return (
       <View className="py-8 items-center justify-center">
-        <Text className="text-red-500 mb-2">{error}</Text>
-        <TouchableOpacity onPress={loadPopularLocations}>
+        <Text className="text-red-500 mb-2" style={{ color: theme.danger }}>
+          {error}
+        </Text>
+        <TouchableOpacity onPress={handleRetry}>
           <Text className="text-blue-600 font-rubik-medium">Retry</Text>
         </TouchableOpacity>
       </View>
@@ -122,11 +159,16 @@ const PopularLocations = ({ limit = 4 }: PopularLocationsProps) => {
           className="text-2xl font-rubik-bold"
           style={{ color: theme.text }}
         >
-          Popular Locations 📍
+          Popular Locations
         </Text>
 
         <TouchableOpacity onPress={handleViewAll}>
-          <Text className="text-blue-600 font-rubik-medium">View All</Text>
+          <Text
+            className="font-rubik-medium"
+            style={{ color: theme.primary[300] }}
+          >
+            View All
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -162,23 +204,10 @@ const PopularLocations = ({ limit = 4 }: PopularLocationsProps) => {
                 {location.name}
               </Text>
 
-              <Text className="text-sm text-gray-500 font-rubik">
+              <Text className="text-sm" style={{ color: theme.muted }}>
                 {location.propertyCount}{" "}
                 {location.propertyCount === 1 ? "property" : "properties"}
               </Text>
-
-              {/* Show sample properties (optional) */}
-              {location.properties.length > 0 && (
-                <View className="mt-2">
-                  <Text className="text-xs text-gray-400">
-                    {location.properties
-                      .map((p) => p.name)
-                      .slice(0, 2)
-                      .join(" ")}
-                    {location.properties.length > 2 && "..."}
-                  </Text>
-                </View>
-              )}
             </View>
           </TouchableOpacity>
         ))}

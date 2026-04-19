@@ -2,9 +2,10 @@
 import AvatarSuccessModal from "@/components/AvatarSuccessModal";
 import icons from "@/constants/icons";
 import {
+  config,
+  databases,
   getUserLikesGiven,
   getUserReviewsGiven,
-  updateUserAvatar,
   uploadImage,
 } from "@/lib/appwrite";
 import { getFavorites } from "@/lib/localFavorites";
@@ -24,6 +25,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { Query } from "react-native-appwrite";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../../../constants/Colors";
 
@@ -118,6 +120,8 @@ const Profile = () => {
   }, [user, fetchTenantStats]);
 
   // Handle image picker for real avatar from gallery
+  // screens/Profile.tsx - Alternative approach without separate function
+
   const pickImage = async () => {
     try {
       const { status } =
@@ -149,9 +153,26 @@ const Profile = () => {
           });
 
           if (uploadedImageUrl) {
-            await updateUserAvatar(user!.$id, uploadedImageUrl);
-            await fetchAuthenticatedUser();
-            setShowSuccess(true);
+            // Find the user document ID
+            const userDocs = await databases.listDocuments(
+              config.databaseId!,
+              config.usersCollectionId!,
+              [Query.equal("accountId", user?.accountId!)],
+            );
+
+            if (userDocs.documents.length > 0) {
+              const userDocId = userDocs.documents[0].$id;
+              await databases.updateDocument(
+                config.databaseId!,
+                config.usersCollectionId!,
+                userDocId,
+                { avatar: uploadedImageUrl },
+              );
+              await fetchAuthenticatedUser();
+              setShowSuccess(true);
+            } else {
+              Alert.alert("Error", "User document not found");
+            }
           }
         }
       }
@@ -164,6 +185,8 @@ const Profile = () => {
   };
 
   // Logout
+  // In your Profile screen
+
   const handleLogout = async () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { text: "Cancel", style: "cancel" },
@@ -176,18 +199,19 @@ const Profile = () => {
             // Clear local avatar storage
             await clearSavedAvatar();
 
-            // Call the signOut method from auth store
+            // Clear local storage data
+            await AsyncStorage.multiRemove([
+              "user_applications",
+              "user_viewed_properties",
+              "user_likes_given",
+              "user_reviews",
+            ]);
+
+            // Use the auth store's signOut method (not the separate logout function)
             const result = await signOut();
 
             if (result.success) {
-              // Clear any additional local data if needed
-              await AsyncStorage.removeItem("user_applications");
-              await AsyncStorage.removeItem("user_viewed_properties");
-              await AsyncStorage.removeItem("user_likes_given");
-              await AsyncStorage.removeItem("user_reviews");
-
-              // Redirect to sign-in (which will redirect to sign-up if not authenticated)
-              router.replace("/sign-up");
+              router.replace("/sign-in");
             } else {
               Alert.alert("Error", result.error || "Failed to logout");
             }

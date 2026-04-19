@@ -23,7 +23,6 @@ export default function MyFavorites() {
   const [loading, setLoading] = useState(true);
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
-
   useEffect(() => {
     const fetchFavorites = async () => {
       try {
@@ -129,11 +128,12 @@ export default function MyFavorites() {
                 borderWidth: 1,
                 borderColor: theme.muted + "30",
                 shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.05,
-                shadowRadius: 3,
-                elevation: 2,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 6,
+                elevation: 3,
               }}
+              activeOpacity={0.85} // subtle feedback
             >
               {/* Property Image */}
               {property.image1 && (
@@ -154,6 +154,7 @@ export default function MyFavorites() {
                   {property.propertyName}
                 </Text>
 
+                {/* Type + Rating */}
                 <View className="flex-row items-center mb-2">
                   <View className="flex-row items-center px-3 py-1 bg-primary-100 rounded-full">
                     <Text className="text-xs font-rubik-medium text-primary-300">
@@ -170,6 +171,7 @@ export default function MyFavorites() {
                   )}
                 </View>
 
+                {/* Address */}
                 <View className="flex-row items-center mb-2">
                   <Image
                     source={icons.location}
@@ -185,13 +187,17 @@ export default function MyFavorites() {
                   </Text>
                 </View>
 
+                {/* Price */}
                 <Text
                   className="text-xl font-rubik-bold mt-2"
                   style={{ color: theme.primary[300] }}
                 >
                   ${property.price}
-                  <Text style={{ color: theme.muted, fontSize: 12 }}>
-                    /month
+                  <Text
+                    className="text-xs font-rubik"
+                    style={{ color: theme.muted }}
+                  >
+                    {property.type === "Boarding" ? "/head" : "/month"}
                   </Text>
                 </Text>
 
@@ -200,12 +206,13 @@ export default function MyFavorites() {
                   onPress={() => handleRemove(property.$id)}
                   className="mt-4 py-3 rounded-full"
                   style={{ backgroundColor: theme.danger + "20" }}
+                  activeOpacity={0.8}
                 >
                   <Text
                     className="text-center font-rubik-medium"
                     style={{ color: theme.danger }}
                   >
-                    Remove from Favorites
+                    ✖ Remove from Favorites
                   </Text>
                 </TouchableOpacity>
               </View>

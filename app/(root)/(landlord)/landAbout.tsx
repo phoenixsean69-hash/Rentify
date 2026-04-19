@@ -307,9 +307,8 @@ export default function AboutScreen() {
               </Text>
               <Text className="text-sm leading-6" style={{ color: theme.text }}>
                 Landlords are responsible for the accuracy of their property
-                listings. Rentify does not verify the accuracy of listings and
-                is not responsible for any disputes between landlords and
-                tenants.
+                listings. nookly does not verify the accuracy of listings and is
+                not responsible for any disputes between landlords and tenants.
               </Text>
             </View>
 
@@ -395,17 +394,10 @@ export default function AboutScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 60 }}
       >
-        {/* App Logo & Name - Cleaner */}
+        {/* App Logo & Name*/}
         <View className="items-center py-12">
-          <View
-            className="w-28 h-28 rounded-2xl items-center justify-center mb-6"
-            style={{ backgroundColor: theme.primary[100] }}
-          >
-            <Image
-              source={images.appLogo}
-              className="w-20 h-20"
-              style={{ tintColor: theme.primary[300] }}
-            />
+          <View className="w-28 h-28 rounded-2xl items-center justify-center mb-6">
+            <Image source={images.appLogo} className="w-20 h-20" />
           </View>
           <Text
             className="text-3xl font-rubik-bold mb-2"
@@ -542,7 +534,7 @@ export default function AboutScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => router.push("/help")}
+            onPress={() => router.push("/landHelp")}
             className="py-4 rounded-xl items-center border"
             style={{ borderColor: theme.muted + "30" }}
           >
@@ -555,7 +547,7 @@ export default function AboutScreen() {
         {/* Footer - Minimal */}
         <View className="items-center pb-8">
           <Text className="text-xs" style={{ color: theme.muted }}>
-            © 2026 Rentify. All rights reserved.
+            © 2026 Nookly. All rights reserved.
           </Text>
         </View>
       </ScrollView>

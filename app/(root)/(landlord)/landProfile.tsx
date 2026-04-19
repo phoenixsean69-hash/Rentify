@@ -1,5 +1,4 @@
 // screens/Profile.tsx
-
 import {
   clearSavedAvatar,
   getSavedAvatar,
@@ -19,6 +18,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+
 import { Query } from "react-native-appwrite";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -27,7 +27,7 @@ import AvatarSuccessModal from "@/components/AvatarSuccessModal";
 import { Colors } from "@/constants/Colors";
 import { getAvatarSource } from "@/constants/data";
 import icons from "@/constants/icons";
-import { config, databases, uploadImage } from "@/lib/appwrite";
+import { config, databases, logout, uploadImage } from "@/lib/appwrite";
 import useAuthStore from "@/store/auth.store";
 
 interface ProfileStats {
@@ -41,7 +41,6 @@ interface ProfileStats {
 
 const LandLordProfile = () => {
   const { user, fetchAuthenticatedUser } = useAuthStore();
-  const { signOut, setUser } = useAuthStore();
   const [modalVisible, setModalVisible] = useState(false);
   const [avatarId, setAvatarId] = useState<string | null>(null);
   const [loadingAvatar, setLoadingAvatar] = useState(true);
@@ -118,7 +117,8 @@ const LandLordProfile = () => {
 
       const occupancyRate =
         properties.length > 0
-          ? (availableProperties / properties.length) * 100
+          ? ((properties.length - availableProperties) / properties.length) *
+            100
           : 0;
 
       setStats({
@@ -181,7 +181,6 @@ const LandLordProfile = () => {
         if (uri) {
           setUploadingAvatar(true);
 
-          // Upload image to Appwrite
           const uploadedImageUrl = await uploadImage({
             uri,
             fileName: `avatar_${user?.accountId}_${Date.now()}.jpg`,
@@ -189,20 +188,26 @@ const LandLordProfile = () => {
           });
 
           if (uploadedImageUrl) {
-            // Update user's avatar in database via Appwrite
-            await databases.updateDocument(
+            // Find the user document ID
+            const userDocs = await databases.listDocuments(
               config.databaseId!,
               config.usersCollectionId!,
-              user!.$id,
-              {
-                avatar: uploadedImageUrl,
-              },
+              [Query.equal("accountId", user?.accountId!)],
             );
 
-            // Refresh user data to get updated avatar
-            await fetchAuthenticatedUser();
-
-            setShowSuccess(true);
+            if (userDocs.documents.length > 0) {
+              const userDocId = userDocs.documents[0].$id;
+              await databases.updateDocument(
+                config.databaseId!,
+                config.usersCollectionId!,
+                userDocId,
+                { avatar: uploadedImageUrl },
+              );
+              await fetchAuthenticatedUser();
+              setShowSuccess(true);
+            } else {
+              Alert.alert("Error", "User document not found");
+            }
           }
         }
       }
@@ -214,7 +219,6 @@ const LandLordProfile = () => {
     }
   };
 
-  // Logout
   const handleLogout = async () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { text: "Cancel", style: "cancel" },
@@ -227,18 +231,19 @@ const LandLordProfile = () => {
             // Clear local avatar storage
             await clearSavedAvatar();
 
-            // Call the signOut method from auth store
-            const result = await signOut();
+            // Clear local storage data
+            await AsyncStorage.multiRemove([
+              "user_applications",
+              "user_viewed_properties",
+              "user_likes_given",
+              "user_reviews",
+            ]);
+
+            // Use the logout function from appwrite
+            const result = await logout();
 
             if (result.success) {
-              // Clear any additional local data if needed
-              await AsyncStorage.removeItem("user_applications");
-              await AsyncStorage.removeItem("user_viewed_properties");
-              await AsyncStorage.removeItem("user_likes_given");
-              await AsyncStorage.removeItem("user_reviews");
-
-              // Redirect to sign-in (which will redirect to sign-up if not authenticated)
-              router.replace("/sign-up");
+              router.replace("/sign-in");
             } else {
               Alert.alert("Error", result.error || "Failed to logout");
             }
@@ -275,13 +280,13 @@ const LandLordProfile = () => {
     {
       icon: icons.settings,
       label: "Settings",
-      route: "/settings",
+      route: "/landSettings",
       color: "#8B5CF6",
     },
     {
       icon: icons.info,
       label: "Help Center",
-      route: "/help",
+      route: "/landHelp",
       color: "#6B7280",
     },
   ];
@@ -387,7 +392,7 @@ const LandLordProfile = () => {
                 style={{ tintColor: theme.primary[300] }}
               />
               <Text
-                className="text-xs font-rubik-medium"
+                className="text-xs text-center font-rubik-medium"
                 style={{ color: theme.primary[300] }}
               >
                 {user?.userMode === "landlord" ? "Landlord" : "Tenant"}

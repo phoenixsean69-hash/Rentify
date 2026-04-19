@@ -7,7 +7,12 @@ import React, {
   useState,
 } from "react";
 import { ID, Query } from "react-native-appwrite";
-import { account, config, databases } from "../lib/appwrite";
+import {
+  account,
+  config,
+  databases,
+  getDefaultAvatarUrl,
+} from "../lib/appwrite";
 
 const createValidAppwriteId = (): string => {
   let id = ID.unique();
@@ -103,6 +108,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   ): Promise<{ success: boolean; error?: string; user?: User }> => {
     try {
       console.log("Starting signup process for:", userData.email);
+      const avatarUrl = userData.avatar?.trim() || getDefaultAvatarUrl(userData.name);
 
       // Validate inputs
       if (
@@ -173,7 +179,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             name: userData.name,
             userMode: userData.userMode,
             email: userData.email,
-            avatar: userData.avatar || "",
+            avatar: avatarUrl,
             phone: userData.phone,
           },
         );

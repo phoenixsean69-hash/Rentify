@@ -1,6 +1,6 @@
 import { Stack } from "expo-router";
 
-// ID for app: rentify
+// ID for app: nookly
 
 export default function MessagesLayout() {
   return (

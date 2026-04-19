@@ -4,13 +4,16 @@ import icons from "@/constants/icons";
 import useAuthStore from "@/store/auth.store";
 import { useNotificationStore } from "@/store/notification.store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   Text,
@@ -35,6 +38,31 @@ interface CalendarEvent {
   createdAt: string;
 }
 
+// Helper function to get local date string (YYYY-MM-DD) without timezone issues
+const getLocalDateString = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+// Parse date string to Date object without timezone issues
+const parseLocalDate = (dateString: string): Date => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+// Format date for display without timezone issues
+const formatDisplayDate = (dateString: string): string => {
+  const date = parseLocalDate(dateString);
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+};
+
 const STORAGE_KEY = "user_calendar_events";
 
 export default function CalendarScreen() {
@@ -51,16 +79,56 @@ export default function CalendarScreen() {
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Custom toast modal states
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastType, setToastType] = useState<"success" | "error">("success");
+  const toastAnim = React.useRef(new Animated.Value(0)).current;
+
+  const slideAnim = React.useRef(new Animated.Value(0)).current;
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
   const [newEvent, setNewEvent] = useState({
     title: "",
     description: "",
-    date: new Date().toISOString().split("T")[0],
+    date: getLocalDateString(new Date()),
     startTime: "10:00",
     endTime: "11:00",
     type: "viewing" as CalendarEvent["type"],
     propertyName: "",
     tenantName: "",
   });
+
+  const animateModalOpen = () => {
+    slideAnim.setValue(0);
+    Animated.timing(slideAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const showToast = (message: string, type: "success" | "error") => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastVisible(true);
+    Animated.sequence([
+      Animated.timing(toastAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2000),
+      Animated.timing(toastAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setToastVisible(false);
+    });
+  };
 
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? "light"];
@@ -117,9 +185,9 @@ export default function CalendarScreen() {
   ];
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  // Get events for a specific date
+  // Get events for a specific date - FIXED: use local date string
   const getEventsForDate = (date: Date) => {
-    const dateString = date.toISOString().split("T")[0];
+    const dateString = getLocalDateString(date);
     return events.filter((event) => event.date === dateString);
   };
 
@@ -139,6 +207,7 @@ export default function CalendarScreen() {
       }
     } catch (error) {
       console.error("Error loading events:", error);
+      showToast("Failed to load events", "error");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -154,6 +223,7 @@ export default function CalendarScreen() {
       await AsyncStorage.setItem(storageKey, JSON.stringify(updatedEvents));
     } catch (error) {
       console.error("Error saving events:", error);
+      throw error;
     }
   };
 
@@ -181,7 +251,8 @@ export default function CalendarScreen() {
   const handleDatePress = (date: Date) => {
     setSelectedDate(date);
   };
-
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [tempDate, setTempDate] = useState(new Date());
   const handleEventPress = (event: CalendarEvent) => {
     setSelectedEvent(event);
     setModalVisible(true);
@@ -204,10 +275,10 @@ export default function CalendarScreen() {
       setEvents(updatedEvents);
       await saveEvents(updatedEvents);
       setEditModalVisible(false);
-      Alert.alert("Success", "Event updated successfully!");
+      showToast("Event updated successfully!", "success");
     } catch (error) {
       console.error("Error updating event:", error);
-      Alert.alert("Error", "Failed to update event");
+      showToast("Failed to update event", "error");
     } finally {
       setSubmitting(false);
     }
@@ -216,6 +287,7 @@ export default function CalendarScreen() {
   const handleDeleteEvent = async () => {
     if (!selectedEvent || !userId) return;
 
+    // Show confirmation modal instead of alert
     Alert.alert("Delete Event", "Are you sure you want to delete this event?", [
       { text: "Cancel", style: "cancel" },
       {
@@ -239,10 +311,10 @@ export default function CalendarScreen() {
             });
 
             setModalVisible(false);
-            Alert.alert("Success", "Event deleted successfully!");
+            showToast("Event deleted successfully!", "success");
           } catch (error) {
             console.error("Error deleting event:", error);
-            Alert.alert("Error", "Failed to delete event");
+            showToast("Failed to delete event", "error");
           } finally {
             setSubmitting(false);
           }
@@ -274,10 +346,10 @@ export default function CalendarScreen() {
       });
 
       setModalVisible(false);
-      Alert.alert("Success", `Event marked as ${newStatus}!`);
+      showToast(`Event marked as ${newStatus}!`, "success");
     } catch (error) {
       console.error("Error updating status:", error);
-      Alert.alert("Error", "Failed to update event status");
+      showToast("Failed to update event status", "error");
     } finally {
       setSubmitting(false);
     }
@@ -285,7 +357,7 @@ export default function CalendarScreen() {
 
   const handleAddEvent = async () => {
     if (!newEvent.title.trim() || !userId) {
-      Alert.alert("Error", "Please enter an event title");
+      showToast("Please enter an event title", "error");
       return;
     }
 
@@ -295,7 +367,7 @@ export default function CalendarScreen() {
         id: Date.now().toString(),
         title: newEvent.title,
         description: newEvent.description,
-        date: newEvent.date,
+        date: newEvent.date, // Already in local format YYYY-MM-DD
         startTime: newEvent.startTime,
         endTime: newEvent.endTime,
         propertyName: newEvent.propertyName,
@@ -309,9 +381,10 @@ export default function CalendarScreen() {
       setEvents(updatedEvents);
       await saveEvents(updatedEvents);
 
-      // Add notification for the new event
-      const eventDate = new Date(newEvent.date);
+      // Add notification for the new event - FIXED: use parseLocalDate
+      const eventDate = parseLocalDate(newEvent.date);
       const today = new Date();
+      today.setHours(0, 0, 0, 0);
       const daysUntil = Math.ceil(
         (eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
       );
@@ -352,10 +425,11 @@ export default function CalendarScreen() {
       });
 
       setAddModalVisible(false);
+      // Reset form - FIXED: use getLocalDateString
       setNewEvent({
         title: "",
         description: "",
-        date: new Date().toISOString().split("T")[0],
+        date: getLocalDateString(new Date()),
         startTime: "10:00",
         endTime: "11:00",
         type: "viewing",
@@ -363,10 +437,10 @@ export default function CalendarScreen() {
         tenantName: "",
       });
 
-      Alert.alert("Success", "Event added successfully!");
+      showToast("Event added successfully!", "success");
     } catch (error) {
       console.error("Error adding event:", error);
-      Alert.alert("Error", "Failed to add event");
+      showToast("Failed to add event", "error");
     } finally {
       setSubmitting(false);
     }
@@ -422,6 +496,47 @@ export default function CalendarScreen() {
         return "Other";
     }
   };
+
+  const renderToast = () => (
+    <Animated.View
+      style={{
+        position: "absolute",
+        bottom: 30,
+        left: 20,
+        right: 20,
+        transform: [
+          {
+            translateY: toastAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [100, 0],
+            }),
+          },
+        ],
+        zIndex: 1000,
+      }}
+    >
+      <View
+        className="rounded-xl p-4 flex-row items-center mx-4"
+        style={{
+          backgroundColor: toastType === "success" ? "#10B981" : "#EF4444",
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+          elevation: 5,
+        }}
+      >
+        <Image
+          source={toastType === "success" ? icons.check : icons.close}
+          className="w-6 h-6 mr-3"
+          style={{ tintColor: "#FFFFFF" }}
+        />
+        <Text className="flex-1 text-white font-rubik-medium text-base">
+          {toastMessage}
+        </Text>
+      </View>
+    </Animated.View>
+  );
 
   const renderEventModal = () => (
     <Modal
@@ -491,11 +606,7 @@ export default function CalendarScreen() {
                     className="ml-2 text-base"
                     style={{ color: theme.text }}
                   >
-                    {new Date(selectedEvent.date).toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                    })}
+                    {formatDisplayDate(selectedEvent.date)}
                   </Text>
                 </View>
                 <View className="flex-row items-center mt-2">
@@ -658,7 +769,7 @@ export default function CalendarScreen() {
                   className="text-sm font-rubik-medium mb-1"
                   style={{ color: theme.muted }}
                 >
-                  Title *
+                  Title
                 </Text>
                 <TextInput
                   value={selectedEvent.title}
@@ -794,204 +905,56 @@ export default function CalendarScreen() {
 
   const renderAddEventModal = () => (
     <Modal
-      animationType="slide"
+      animationType="fade"
       transparent={true}
       visible={addModalVisible}
       onRequestClose={() => setAddModalVisible(false)}
+      onShow={() => animateModalOpen()}
     >
       <View className="flex-1 justify-end bg-black/50">
-        <View
-          className="rounded-t-3xl p-6"
-          style={{ backgroundColor: theme.background }}
+        <Animated.View
+          style={{
+            transform: [
+              {
+                translateY: slideAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [600, 0],
+                }),
+              },
+            ],
+          }}
         >
-          <View className="flex-row justify-between items-center mb-4">
-            <Text
-              className="text-xl font-rubik-bold"
-              style={{ color: theme.title }}
-            >
-              Add New Event
-            </Text>
-            <TouchableOpacity onPress={() => setAddModalVisible(false)}>
-              <Text className="text-2xl" style={{ color: theme.text }}>
-                ✕
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View className="mb-4">
+          <View
+            className="rounded-t-3xl p-6"
+            style={{ backgroundColor: theme.background }}
+          >
+            <View className="flex-row justify-between items-center mb-4">
               <Text
-                className="text-sm font-rubik-medium mb-1"
-                style={{ color: theme.muted }}
+                className="text-xl font-rubik-bold"
+                style={{ color: theme.title }}
               >
-                Title *
+                ✨ Add New Event
               </Text>
-              <TextInput
-                value={newEvent.title}
-                onChangeText={(text) =>
-                  setNewEvent({ ...newEvent, title: text })
-                }
-                className="border rounded-lg px-4 py-3"
-                style={{
-                  backgroundColor: theme.surface,
-                  borderColor: theme.muted + "50",
-                  color: theme.text,
-                }}
-                placeholder="e.g., Property Viewing"
-                placeholderTextColor={theme.muted}
-              />
-            </View>
-
-            <View className="mb-4">
-              <Text
-                className="text-sm font-rubik-medium mb-1"
-                style={{ color: theme.muted }}
-              >
-                Event Type
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {[
-                  "viewing",
-                  "maintenance",
-                  "meeting",
-                  "payment",
-                  "move_in",
-                  "other",
-                ].map((type) => (
-                  <TouchableOpacity
-                    key={type}
-                    onPress={() =>
-                      setNewEvent({
-                        ...newEvent,
-                        type: type as CalendarEvent["type"],
-                      })
-                    }
-                    className={`px-4 py-2 rounded-full mr-2`}
-                    style={{
-                      backgroundColor:
-                        newEvent.type === type
-                          ? getEventTypeColor(type)
-                          : theme.surface,
-                      borderWidth: 1,
-                      borderColor: theme.muted + "50",
-                    }}
-                  >
-                    <Text
-                      className="text-sm font-rubik-medium capitalize"
-                      style={{
-                        color: newEvent.type === type ? "white" : theme.text,
-                      }}
-                    >
-                      {getEventTypeLabel(type)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-
-            <View className="mb-4">
-              <Text
-                className="text-sm font-rubik-medium mb-1"
-                style={{ color: theme.muted }}
-              >
-                Date
-              </Text>
-              <TextInput
-                value={newEvent.date}
-                onChangeText={(text) =>
-                  setNewEvent({ ...newEvent, date: text })
-                }
-                className="border rounded-lg px-4 py-3"
-                style={{
-                  backgroundColor: theme.surface,
-                  borderColor: theme.muted + "50",
-                  color: theme.text,
-                }}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={theme.muted}
-              />
-            </View>
-
-            <View className="flex-row gap-4 mb-4">
-              <View className="flex-1">
-                <Text
-                  className="text-sm font-rubik-medium mb-1"
-                  style={{ color: theme.muted }}
-                >
-                  Start Time
+              <TouchableOpacity onPress={() => setAddModalVisible(false)}>
+                <Text className="text-2xl" style={{ color: theme.text }}>
+                  ✕
                 </Text>
-                <TextInput
-                  value={newEvent.startTime}
-                  onChangeText={(text) =>
-                    setNewEvent({ ...newEvent, startTime: text })
-                  }
-                  className="border rounded-lg px-4 py-3"
-                  style={{
-                    backgroundColor: theme.surface,
-                    borderColor: theme.muted + "50",
-                    color: theme.text,
-                  }}
-                  placeholder="09:00"
-                />
-              </View>
-              <View className="flex-1">
-                <Text
-                  className="text-sm font-rubik-medium mb-1"
-                  style={{ color: theme.muted }}
-                >
-                  End Time
-                </Text>
-                <TextInput
-                  value={newEvent.endTime}
-                  onChangeText={(text) =>
-                    setNewEvent({ ...newEvent, endTime: text })
-                  }
-                  className="border rounded-lg px-4 py-3"
-                  style={{
-                    backgroundColor: theme.surface,
-                    borderColor: theme.muted + "50",
-                    color: theme.text,
-                  }}
-                  placeholder="10:00"
-                />
-              </View>
+              </TouchableOpacity>
             </View>
 
-            <View className="mb-4">
-              <Text
-                className="text-sm font-rubik-medium mb-1"
-                style={{ color: theme.muted }}
-              >
-                Property Name (Optional)
-              </Text>
-              <TextInput
-                value={newEvent.propertyName}
-                onChangeText={(text) =>
-                  setNewEvent({ ...newEvent, propertyName: text })
-                }
-                className="border rounded-lg px-4 py-3"
-                style={{
-                  backgroundColor: theme.surface,
-                  borderColor: theme.muted + "50",
-                  color: theme.text,
-                }}
-                placeholder="e.g., Sunset Villa"
-                placeholderTextColor={theme.muted}
-              />
-            </View>
-
-            {isLandlord && (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Title with icon */}
               <View className="mb-4">
                 <Text
                   className="text-sm font-rubik-medium mb-1"
                   style={{ color: theme.muted }}
                 >
-                  Tenant Name (Optional)
+                  📝 Title *
                 </Text>
                 <TextInput
-                  value={newEvent.tenantName}
+                  value={newEvent.title}
                   onChangeText={(text) =>
-                    setNewEvent({ ...newEvent, tenantName: text })
+                    setNewEvent({ ...newEvent, title: text })
                   }
                   className="border rounded-lg px-4 py-3"
                   style={{
@@ -999,61 +962,260 @@ export default function CalendarScreen() {
                     borderColor: theme.muted + "50",
                     color: theme.text,
                   }}
-                  placeholder="Tenant name"
+                  placeholder="e.g., Property Viewing"
                   placeholderTextColor={theme.muted}
                 />
               </View>
-            )}
 
-            <View className="mb-4">
-              <Text
-                className="text-sm font-rubik-medium mb-1"
-                style={{ color: theme.muted }}
-              >
-                Description (Optional)
-              </Text>
-              <TextInput
-                value={newEvent.description}
-                onChangeText={(text) =>
-                  setNewEvent({ ...newEvent, description: text })
-                }
-                className="border rounded-lg px-4 py-3 h-24"
-                style={{
-                  backgroundColor: theme.surface,
-                  borderColor: theme.muted + "50",
-                  color: theme.text,
-                }}
-                multiline
-                textAlignVertical="top"
-                placeholder="Add details..."
-              />
-            </View>
-
-            <View className="flex-row gap-3 mt-4 mb-10">
-              <TouchableOpacity
-                onPress={() => setAddModalVisible(false)}
-                className="flex-1 py-3 rounded-full border"
-                style={{ borderColor: theme.muted + "50" }}
-              >
+              {/* Event Type - Animated selection */}
+              <View className="mb-4">
                 <Text
-                  className="text-center font-rubik-medium"
-                  style={{ color: theme.text }}
+                  className="text-sm font-rubik-medium mb-2"
+                  style={{ color: theme.muted }}
                 >
-                  Cancel
+                  🏷️ Event Type
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleAddEvent}
-                disabled={submitting}
-                className="flex-1 py-3 rounded-full bg-primary-300"
-              >
-                <Text className="text-white text-center font-rubik-medium">
-                  {submitting ? "Adding..." : "Add Event"}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {[
+                    { value: "viewing", label: "🔍 Viewing", color: "#3B82F6" },
+                    {
+                      value: "maintenance",
+                      label: "🔧 Maintenance",
+                      color: "#F59E0B",
+                    },
+                    { value: "meeting", label: "🤝 Meeting", color: "#8B5CF6" },
+                    { value: "payment", label: "💰 Payment", color: "#10B981" },
+                    { value: "move_in", label: "📦 Move-in", color: "#EF4444" },
+                    { value: "other", label: "📌 Other", color: "#6B7280" },
+                  ].map((type) => (
+                    <TouchableOpacity
+                      key={type.value}
+                      onPress={() => {
+                        Animated.sequence([
+                          Animated.timing(scaleAnim, {
+                            toValue: 0.95,
+                            duration: 50,
+                            useNativeDriver: true,
+                          }),
+                          Animated.spring(scaleAnim, {
+                            toValue: 1,
+                            useNativeDriver: true,
+                            tension: 200,
+                            friction: 10,
+                          }),
+                        ]).start();
+                        setNewEvent({
+                          ...newEvent,
+                          type: type.value as CalendarEvent["type"],
+                        });
+                      }}
+                      className={`px-4 py-2 rounded-full mr-2`}
+                      style={{
+                        transform: [{ scale: scaleAnim }],
+                        backgroundColor:
+                          newEvent.type === type.value
+                            ? type.color
+                            : theme.surface,
+                        borderWidth: 1,
+                        borderColor: theme.muted + "50",
+                      }}
+                    >
+                      <Text
+                        className="text-sm font-rubik-medium"
+                        style={{
+                          color:
+                            newEvent.type === type.value ? "white" : theme.text,
+                        }}
+                      >
+                        {type.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Date with Calendar Picker - FIXED display */}
+              <View className="mb-4">
+                <Text
+                  className="text-sm font-rubik-medium mb-1"
+                  style={{ color: theme.muted }}
+                >
+                  📅 Date
                 </Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setTempDate(parseLocalDate(newEvent.date));
+                    setShowDatePicker(true);
+                  }}
+                  className="border rounded-lg px-4 py-3 flex-row items-center justify-between"
+                  style={{
+                    backgroundColor: theme.surface,
+                    borderColor: theme.muted + "50",
+                  }}
+                >
+                  <View className="flex-row items-center">
+                    <Text className="text-lg mr-2">📅</Text>
+                    <Text style={{ color: theme.text, fontSize: 16 }}>
+                      {formatDisplayDate(newEvent.date)}
+                    </Text>
+                  </View>
+                  <Text style={{ color: theme.primary[300], fontSize: 14 }}>
+                    Change
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Time row */}
+              <View className="flex-row gap-4 mb-4">
+                <View className="flex-1">
+                  <Text
+                    className="text-sm font-rubik-medium mb-1"
+                    style={{ color: theme.muted }}
+                  >
+                    ⏰ Start Time
+                  </Text>
+                  <TextInput
+                    value={newEvent.startTime}
+                    onChangeText={(text) =>
+                      setNewEvent({ ...newEvent, startTime: text })
+                    }
+                    className="border rounded-lg px-4 py-3"
+                    style={{
+                      backgroundColor: theme.surface,
+                      borderColor: theme.muted + "50",
+                      color: theme.text,
+                    }}
+                    placeholder="09:00"
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text
+                    className="text-sm font-rubik-medium mb-1"
+                    style={{ color: theme.muted }}
+                  >
+                    ⏰ End Time
+                  </Text>
+                  <TextInput
+                    value={newEvent.endTime}
+                    onChangeText={(text) =>
+                      setNewEvent({ ...newEvent, endTime: text })
+                    }
+                    className="border rounded-lg px-4 py-3"
+                    style={{
+                      backgroundColor: theme.surface,
+                      borderColor: theme.muted + "50",
+                      color: theme.text,
+                    }}
+                    placeholder="10:00"
+                  />
+                </View>
+              </View>
+
+              {/* Property Name */}
+              <View className="mb-4">
+                <Text
+                  className="text-sm font-rubik-medium mb-1"
+                  style={{ color: theme.muted }}
+                >
+                  🏠 Property Name (Optional)
+                </Text>
+                <TextInput
+                  value={newEvent.propertyName}
+                  onChangeText={(text) =>
+                    setNewEvent({ ...newEvent, propertyName: text })
+                  }
+                  className="border rounded-lg px-4 py-3"
+                  style={{
+                    backgroundColor: theme.surface,
+                    borderColor: theme.muted + "50",
+                    color: theme.text,
+                  }}
+                  placeholder="e.g., Sunset Villa"
+                  placeholderTextColor={theme.muted}
+                />
+              </View>
+
+              {/* Tenant Name - Only for landlords */}
+              {isLandlord && (
+                <View className="mb-4">
+                  <Text
+                    className="text-sm font-rubik-medium mb-1"
+                    style={{ color: theme.muted }}
+                  >
+                    👤 Tenant Name (Optional)
+                  </Text>
+                  <TextInput
+                    value={newEvent.tenantName}
+                    onChangeText={(text) =>
+                      setNewEvent({ ...newEvent, tenantName: text })
+                    }
+                    className="border rounded-lg px-4 py-3"
+                    style={{
+                      backgroundColor: theme.surface,
+                      borderColor: theme.muted + "50",
+                      color: theme.text,
+                    }}
+                    placeholder="Tenant name"
+                    placeholderTextColor={theme.muted}
+                  />
+                </View>
+              )}
+
+              {/* Description */}
+              <View className="mb-4">
+                <Text
+                  className="text-sm font-rubik-medium mb-1"
+                  style={{ color: theme.muted }}
+                >
+                  📝 Description (Optional)
+                </Text>
+                <TextInput
+                  value={newEvent.description}
+                  onChangeText={(text) =>
+                    setNewEvent({ ...newEvent, description: text })
+                  }
+                  className="border rounded-lg px-4 py-3 h-24"
+                  style={{
+                    backgroundColor: theme.surface,
+                    borderColor: theme.muted + "50",
+                    color: theme.title,
+                  }}
+                  multiline
+                  textAlignVertical="top"
+                  placeholder="Add details..."
+                />
+              </View>
+
+              {/* Animated Buttons */}
+              <View className="flex-row gap-3 mt-4 mb-10">
+                <TouchableOpacity
+                  onPress={() => setAddModalVisible(false)}
+                  className="flex-1 py-3 rounded-full border"
+                  style={{ borderColor: theme.muted + "50" }}
+                >
+                  <Text
+                    className="text-center font-rubik-medium"
+                    style={{ color: theme.text }}
+                  >
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleAddEvent}
+                  disabled={submitting}
+                  className="flex-1 py-3 rounded-full bg-primary-300"
+                  style={{
+                    opacity: submitting ? 0.6 : 1,
+                  }}
+                >
+                  <Text className="text-white text-center font-rubik-medium">
+                    {submitting ? "✨ Adding..." : "✨ Add Event"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -1141,9 +1303,11 @@ export default function CalendarScreen() {
                 .map((day, dayIndex) => {
                   const dayEvents = getEventsForDate(day.date);
                   const isToday =
-                    day.date.toDateString() === new Date().toDateString();
+                    getLocalDateString(day.date) ===
+                    getLocalDateString(new Date());
                   const isSelected =
-                    day.date.toDateString() === selectedDate.toDateString();
+                    getLocalDateString(day.date) ===
+                    getLocalDateString(selectedDate);
 
                   return (
                     <TouchableOpacity
@@ -1319,6 +1483,23 @@ export default function CalendarScreen() {
       {renderEventModal()}
       {renderAddEventModal()}
       {renderEditModal()}
+      {renderToast()}
+
+      {/* Date Picker Modal */}
+      {showDatePicker && (
+        <DateTimePicker
+          value={tempDate}
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={(event, date) => {
+            setShowDatePicker(false);
+            if (date) {
+              const dateString = getLocalDateString(date);
+              setNewEvent({ ...newEvent, date: dateString });
+            }
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
